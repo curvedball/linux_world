@@ -1,0 +1,166 @@
+
+
+
+
+
+大致的思路：
+
+clfs_systemd版本 + linux4.12.4z内核 ===> hello.img 虚拟机本身使用e1000或者r8139模拟网卡，并且这些模拟网卡在virt-manager中passthrough到物理计算机的某个物理网卡（物理网卡不需要设置ip地址），这样启动的clfs系统，能够运行到命令行，也能够通过网卡访问外网。
+
+
+=======================================================================
+四大金刚：
+
+sogou输入法
+
+PDF编辑器: FoxitReader
+
+WPS编辑器: wps writer
+
+Source Insight (安装wine后继续安装)
+
+=======================================================================
+
+环境搭建具体步骤
+1.
+U disk install ubuntu16.04 到硬盘上。
+
+
+2.
+构建好宿主系统 
+(1) passwd root 		### 
+/usr/share/lightdm/lightdm.conf.d/50-ubuntu.conf 	### 
+sudo gedit, greeter-show-manual-login=true 
+/root/.profile 			### tty -s && mesg n reboot
+
+
+(2)sogou linux输入法 搜索"sogou linux"，下载到*.deb文件后，双击安装。完成后reboot计算机，
+然后点击桌面右上角的键盘配置，添加sogo输入法就ok。 用Ctrl + Space键完成输入法的切换。
+
+
+
+
+(3)FoxitReader PDF阅读器 
+下载linux版本的FoxitReader 
+https://www.foxitsoftware.cn/products/reader/ #下载的*.tar.gz先解压 
+chmod a+x aaa.run #添加执行权限 
+./aaa.run #执行 
+选择一个PDF文件然后右键，找到FoxitReader程序，打开。
+
+
+
+(4)WPS编辑器 
+搜索"linux wps"，下载*.deb文件后，双击安装； 点击视图-->文档结构图-->靠左 
+点击样式箭头 点击工具栏的编号的下拉箭头-->自定义编号-->自定义，让标题1、标题2、...等与编号关联起来 
+wps的xxx.docx文档制作完成。
+
+
+(5）桌面左侧的ubuntu software中，搜索wine， 安装。 wine si3.5.exe来安装source insight 3.5版本。
+
+
+================================================================
+apt-get install qemu-kvm 
+apt-get install qemu 
+apt-get install virt-manager 
+apt-get install virt-viewer 
+apt-get install libvirt-bin 
+apt-get install bridge-utils 
+reboot 				### wait 30 seconds after boot ok! 
+virsh -c qemu:///system list 	### view the output 
+virt-manager 			### Run
+
+
+
+3.
+制作vm镜像 
+dd if=/dev/zero of=hello.img bs=1M count=6000 
+losetup /dev/loop0 hello.img 
+fdisk -l /dev/loop0 
+fdisk /dev/loop0 			### w: error can be neglected!!! 
+fdisk -l
+kpartx -av /dev/loop0 			### Very Important!!! 
+mkfs.ext4 /dev/mapper/loop0p1 		### mapper is needed!!!
+
+mount /dev/mapper/loop0p1 /mnt 
+cd /mnt 
+cpio -icdu < /zb/clfs3.0.0_MultiLib_Systemd_CommandLineVersionSystemFullOk_with_Python.cpio 
+cd /zb 
+umount /mnt 
+mount /dev/mapper/loop0p1 /mnt
+
+
+Modify /mnt/boot/grub/grub.cfg
+-----------------------------------------------------------
+menuentry 'cblfs' { linux /boot/vmlinuz-clfs-3.14.21 root=/dev/sda1 rw quiet splash $vt_handoff }
+menuentry 'cblfs_4.12.4z' { linux /boot/vmlinuz_4.12.4z root=/dev/sda1 rw }
+-----------------------------------------------------------
+grub-install --boot-directory=/mnt/boot /dev/loop0
+
+clfs_4.12.4z boot to commandline, OK! But no NIC in the clfs system!!!
+
+
+4.
+启用e1000或者r8139模拟网卡
+add drivers/net/ethernet/intel directory from linux4.12.4 source to /usr/src/linux4.12.4z/drivers/net/ethernet
+keep e1000 dir, modify makefile, compile it to e1000.ko cp e1000.ko /mnt/root ### 
+virt-manager ### Add NIC hardware: Hostdevice enp2s0(Physical NIC to Internet), passthrough, e1000 
+boot to clfs commandline, then insmod e1000.ko 		###
+dmesg 
+ifconfig enp0s3 up ifconfig enp0s3 192.168.30.203 netmask 255.255.255.0 ### 
+ping 192.168.30.1 ### ping OK!
+
+Finally, ---hello.img--- is the ultimate version!!!
+
+
+
+补充说明：
+(1)
+宿主机有2个物理网卡enp2s0, enp5s0
+设置enp2s0为Link only, 然后设置它的ip为空, ifconfig enp2s0 0.0.0.0
+设置enp5s0为192.168.30.205, 这样可以访问Internet
+
+(2)
+VM的虚拟网卡使用r8139(或者e1000），然后虚拟网卡采用passthrough方式，直连到物理网卡enp2s0，这样虚拟机中也可以访问Inernet
+注意：
+a: 必须把r8139驱动编译进内核
+b: 保证vm镜像文件的/etc/sysconfig/目录下有ifconfig.eth0和ifconfig.enp0s3两个文件存在(虚拟网卡的名称可以通过把r8139编译成模块，然后insmod r8139.ko查看界面输出)
+ifconfig.eth0文件的内容与ifconfig.enp0s3保持一致即可。
+
+------------------------ifconfig.eth0---------------------------------
+IFACE="enp0s3"
+SERVICE="ipv4-static"
+IP="192.168.30.203"
+GATEWAY="192.168.30.1"
+PREFIX="24"
+BROADCAST="192.168.30.255"
+
+
+------------------------ifconfig.enp0s3---------------------------------
+IFACE="enp0s3"
+SERVICE="ipv4-static"
+IP="192.168.30.203"
+GATEWAY="192.168.30.1"
+PREFIX="24"
+BROADCAST="192.168.30.255"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

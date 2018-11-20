@@ -1,0 +1,3917 @@
+
+
+
+0. 特别注意事项
+==============================================================================================
+(1) Download CLFS Book
+http://clfs.org/view/CLFS-3.0.0-SYSTEMD/x86_64/  	###clfs Book online
+http://cblfs.clfs.org/index.php/Main_Page  		###CBLFS 
+
+http://clfs.org/files/packages/2.1.0/ ###下载各种软件包
+git clone git://git.clfs.org/cross-lfs.git  #也能下载补丁包
+cd /cross-lfs/BOOK
+cat //cross-lfs/BOOK/INSTALL    ###Read it!
+
+
+
+
+
+
+
+
+(2)
+http://clfs.org/files/packages/2.1.0/ ###下载各种软件包
+https://ftp.osuosl.org/pub/clfs/clfs-packages/git/   ###下载各种软件包
+http://patches.clfs.org/3.0.0/SYSTEMD/	###有效的补丁包必须下载安装
+
+https://github.com/bradfa/cross-lfs/tree/master/patches ###补丁包
+https://git.kernel.org/pub/scm/docs/man-pages/man-pages.git/refs/tags  ###download man-pages-3.68.tar.gz
+
+(3)
+ncurses(patch) ###Important, otherwise ldd /tools/bin/bash Error!!!
+gcc-4.8.3-specs-1.patch  ###Important, otherwise chroot Error!!!
+
+
+(4) Compile steps, very Important!!!
+tar zxf xxx.tar.gz
+cd xxx
+./configure xxx
+make
+make install
+cd ..
+rm -rf xxx            ### Very Important: To remove the erros in multiple compilations!!!
+
+
+(5)
+disk_format: ext2 or ext4?
+
+
+
+1. 宿主系统准备工作
+==============================================================================================
+(0)
+安装宿主系统(ubuntu16.10, Select the “development” option)
+
+-------------------------------------------
+apt install gcc-4.7        ###降低gcc版本
+apt install g++-4.7
+----------------------------------------------------
+
+mv gcc gcc.bak
+ln -s gcc-4.7 gcc
+
+mv gcc-ar gcc-ar.bak
+ln -s gcc-ar-4.7 gcc-ar
+
+mv gcc-nm gcc-nm.bak
+ln -s gcc-nm-4.7 gcc-nm
+
+mv gcc-ranlib gcc-ranlib.bak
+ln -s gcc-ranlib-4.7 gcc-ranlib
+
+mv x86_64-linux-gnu-gcc x86_64-linux-gnu-gcc.bak
+ln -s gcc-4.7 x86_64-linux-gnu-gcc
+
+mv x86_64-linux-gnu-gcc-ar x86_64-linux-gnu-gcc-ar.bak
+ln -s gcc-ar-4.7 x86_64-linux-gnu-gcc-ar
+
+mv x86_64-linux-gnu-gcc-nm x86_64-linux-gnu-gcc-nm.bak
+ln -s gcc-nm-4.7 x86_64-linux-gnu-gcc-nm
+
+mv x86_64-linux-gnu-gcc-ranlib x86_64-linux-gnu-gcc-ranlib.bak
+ln -s gcc-ranlib-4.7 x86_64-linux-gnu-gcc-ranlib
+
+----------------------------------------
+mv g++ g++.bak
+ln -s g++-4.7 g++
+
+----------------------------------------
+gcc -v
+g++ -v
+----------------------------------------
+
+
+
+(1)
+bash /zb/clfs/sources/version-check.sh
+---------------------------------------
+
+bash version-check.sh 2>errors.log && [ -s errors.log ] && echo -e "\nThe following packages could not be found:\n$(cat errors.log)" #检查Fail
+apt install bison 	#安装ok
+apt install gawk  	#安装ok
+apt install texinfo 	#安装makeinfo成功
+bash version-check.sh 2>errors.log && [ -s errors.log ] && echo -e "\nThe following packages could not be found:\n$(cat errors.log)"   #检查OK
+
+
+
+
+(2) Help
+If something goes wrong while running the configure script, review the config.log file.
+
+
+
+(3)宿主系统新建/root/.bashenv, 内容如下
+------------------------
+export CLFS=/mnt/clfs
+------------------------
+
+source /root/.bashenv
+echo $CLFS
+echo ${CLFS}
+
+
+(4)分区／格式化／挂载
+fdisk -l
+fdisk /dev/sda
+
+mke2fs /dev/sda1
+mkfs -t ext4 /dev/sda1  ###grub-install will fail!!!
+
+export CLFS=/mnt/clfs
+echo $CLFS
+
+mkdir -pv ${CLFS}
+mount -v /dev/sda1 ${CLFS}
+
+
+(5)创建/mnt/clfs/sources目录
+mkdir -v ${CLFS}/sources
+chmod -v a+wt ${CLFS}/sources
+
+
+(6)下载各种软件包(手工下载耗时60分钟)
+wget -i dl.list -P ${CLFS}/sources  #Failed!
+http://clfs.org/view/CLFS-3.0.0-SYSTEMD/x86_64/materials/packages.html #下载
+https://ftp.osuosl.org/pub/clfs/clfs-packages/git/   ###下载 各种软件包
+
+http://patches.clfs.org/3.0.0/SYSTEMD/	###有效的补丁包必须下载安装
+http://savannah.nongnu.org/projects/   #下载
+http://download.savannah.nongnu.org/releases/sysvinit/ #下载
+
+
+
+(7)创建/mnt/clfs/tools和/mnt/clfs/cross-tools目录
+install -dv ${CLFS}/tools
+ln -sv ${CLFS}/tools /
+
+
+install -dv ${CLFS}/cross-tools
+ln -sv ${CLFS}/cross-tools /
+
+
+(8)加载环境变量
+cat > ~/.bash_profile_NEW << "EOF"
+exec env -i HOME=${HOME} TERM=${TERM} PS1='\u:\w\$ ' /bin/bash
+EOF
+
+cat > ~/.bashrc_NEW << "EOF"
+set +h
+umask 022
+CLFS=/mnt/clfs
+LC_ALL=POSIX
+PATH=/cross-tools/bin:/bin:/usr/bin
+export CLFS LC_ALL PATH
+unset CFLAGS CXXFLAGS
+EOF
+
+source ~/.bash_profile_NEW
+source ~/.bashrc_NEW
+
+
+
+(9)加载编译变量
+export CLFS_HOST=$(echo ${MACHTYPE} | sed -e 's/-[^-]*/-cross/')
+export CLFS_TARGET="x86_64-unknown-linux-gnu"
+export CLFS_TARGET32="i686-pc-linux-gnu"
+export BUILD32="-m32"
+export BUILD64="-m64"
+
+
+cat >> ~/.bashrc_NEW << EOF
+export CLFS_HOST="${CLFS_HOST}"
+export CLFS_TARGET="${CLFS_TARGET}"
+export CLFS_TARGET32="${CLFS_TARGET32}"
+export BUILD32="${BUILD32}"
+export BUILD64="${BUILD64}"
+EOF
+
+-----------------------.bashrc_NEW 真正的内容-----------------------------------
+set +h
+umask 022
+CLFS=/mnt/clfs
+LC_ALL=POSIX
+PATH=/cross-tools/bin:/bin:/usr/bin
+export CLFS LC_ALL PATH
+unset CFLAGS CXXFLAGS
+
+export CLFS_HOST="x86_64-cross-linux-gnu"
+export CLFS_TARGET="x86_64-unknown-linux-gnu"
+export CLFS_TARGET32="i686-pc-linux-gnu"
+export BUILD32="-m32"
+export BUILD64="-m64"
+
+
+
+(10)备份与恢复
+(a)
+mount /dev/sda1 /mnt/clfs
+cd /mnt/clfs
+ls
+find . | cpio -coB > /zb/clfs/clfs3.0.0_systemd_MultiLib_chapter4_ok.cpio         ###备份
+umount /mnt/clfs
+
+
+(b)
+fdisk -l
+fdisk /dev/sda
+mount /dev/sda1 /mnt/clfs
+cd /mnt/clfs
+ls
+cpio -icdu < /zb/clfs/clfs3.0.0_systemd_MultiLib_chapter4_ok.cpio            ###恢复
+ls
+
+
+
+
+
+2. 编译交叉工具链
+==============================================================================================
+(1)新建命令行, 加载环境变量和编译变量
+source /root/.bash_profile_NEW
+source /root/.bashrc_NEW
+
+
+(2)编译安装后, 删除源代码目录
+After installing each package, both in this and the next chapters, delete its source and build directories, unless specifically instructed otherwise. Deleting the sources prevents mis-configuration when the same package is reinstalled later. 
+
+
+(3)编译安装File-5.19
+./configure --prefix=/cross-tools --disable-static
+make
+make install
+
+
+(4)编译安装Linux-3.14.21 Headers
+xzcat ../patch-3.14.21.xz | patch -Np1 -i -
+make mrproper
+make ARCH=x86_64 headers_check
+make ARCH=x86_64 INSTALL_HDR_PATH=/tools headers_install
+
+
+
+(5)编译安装M4-1.4.17
+./configure --prefix=/cross-tools
+make
+make install
+
+
+(6)编译安装Ncurses-5.9
+patch -Np1 -i ../ncurses-5.9-bash_fix-1.patch		###必须安装这个补丁包, 否则将来执行ldd /tools/bin/bash, Error!!!
+./configure --prefix=/cross-tools --without-debug --without-shared
+make -C include
+make -C progs tic   ####解决办法: 降低gcc版本4.7
+install -v -m755 progs/tic /cross-tools/bin
+
+
+
+(7)编译安装Pkg-config-lite-0.28-1
+./configure --prefix=/cross-tools --host=${CLFS_TARGET} --with-pc-path=/tools/lib64/pkgconfig:/tools/share/pkgconfig
+make
+make install
+
+
+--------------------------------------------
+
+(8)编译安装GMP-6.0.0
+./configure --prefix=/cross-tools --enable-cxx --disable-static
+make
+make install
+
+
+(9)编译安装MPFR-3.1.2
+patch -Np1 -i ../mpfr-3.1.2-fixes-4.patch
+LDFLAGS="-Wl,-rpath,/cross-tools/lib" ./configure --prefix=/cross-tools --disable-static --with-gmp=/cross-tools
+make
+make install
+
+
+
+(10)编译安装MPC-1.0.2
+LDFLAGS="-Wl,-rpath,/cross-tools/lib" ./configure --prefix=/cross-tools --disable-static --with-gmp=/cross-tools --with-mpfr=/cross-tools
+make
+make install
+
+-------------------------------------------------
+
+
+(11)编译安装ISL-0.12.2
+lzma -d isl-0.12.2.tar.lzma
+LDFLAGS="-Wl,-rpath,/cross-tools/lib" ./configure --prefix=/cross-tools --disable-static --with-gmp-prefix=/cross-tools
+make
+make install
+
+
+
+(12)编译安装CLooG-0.18.2
+LDFLAGS="-Wl,-rpath,/cross-tools/lib" ./configure --prefix=/cross-tools --disable-static --with-gmp-prefix=/cross-tools --with-isl-prefix=/cross-tools
+cp -v Makefile{,.orig}
+sed '/cmake/d' Makefile.orig > Makefile
+make
+make install
+
+
+
+(13)编译安装Cross Binutils-2.24
+mkdir -v ../binutils-build
+cd ../binutils-build
+AR=ar AS=as ../binutils-2.24/configure \
+    --prefix=/cross-tools --host=${CLFS_HOST} --target=${CLFS_TARGET} \
+    --with-sysroot=${CLFS} --with-lib-path=/tools/lib:/tools/lib64 \
+    --disable-nls --disable-static --enable-64-bit-bfd --disable-werror
+make
+make install
+
+
+---------------------------------------------------------------------------------------------------------
+find . | cpio -coB > /zb/clfs/clfs3.0.0_systemd_MultiLib_chapter5_cross_binutils_ok.cpio         ###备份
+---------------------------------------------------------------------------------------------------------
+
+
+
+(14)编译安装Cross GCC-4.8.3 - Static
+patch -Np1 -i ../gcc-4.8.3-branch_update-1.patch
+patch -Np1 -i ../gcc-4.8.3-specs-1.patch
+echo -en '\n#undef STANDARD_STARTFILE_PREFIX_1\n#define STANDARD_STARTFILE_PREFIX_1 "/tools/lib/"\n' >> gcc/config/linux.h
+echo -en '\n#undef STANDARD_STARTFILE_PREFIX_2\n#define STANDARD_STARTFILE_PREFIX_2 ""\n' >> gcc/config/linux.h
+touch /tools/include/limits.h
+mkdir -v ../gcc-build
+cd ../gcc-build
+AR=ar LDFLAGS="-Wl,-rpath,/cross-tools/lib" \
+    ../gcc-4.8.3/configure --prefix=/cross-tools \
+    --build=${CLFS_HOST} --host=${CLFS_HOST} --target=${CLFS_TARGET} \
+    --with-sysroot=${CLFS} --with-local-prefix=/tools \
+    --with-native-system-header-dir=/tools/include --disable-nls \
+    --disable-shared --with-mpfr=/cross-tools --with-gmp=/cross-tools \
+    --with-cloog=/cross-tools --with-mpc=/cross-tools --without-headers \
+    --with-newlib --disable-decimal-float --disable-libgomp --disable-libmudflap \
+    --disable-libssp --disable-libatomic --disable-libitm \
+    --disable-libsanitizer --disable-libquadmath --disable-threads \
+    --disable-target-zlib --with-system-zlib --with-isl=/cross-tools \
+    --enable-languages=c --enable-checking=release
+make all-gcc all-target-libgcc
+make install-gcc install-target-libgcc
+
+
+
+
+
+(15)编译安装Glibc-2.19 32 Bit
+cp -v timezone/Makefile{,.orig}
+sed 's/\\$$(pwd)/`pwd`/' timezone/Makefile.orig > timezone/Makefile
+mkdir -v ../glibc-build
+cd ../glibc-build
+echo "libc_cv_ssp=no" > config.cache
+BUILD_CC="gcc" CC="${CLFS_TARGET}-gcc ${BUILD32}" \
+    AR="${CLFS_TARGET}-ar" RANLIB="${CLFS_TARGET}-ranlib" \
+    ../glibc-2.19/configure --prefix=/tools \
+    --host=${CLFS_TARGET32} --build=${CLFS_HOST} \
+    --disable-profile --enable-kernel=2.6.32 \
+    --with-binutils=/cross-tools/bin --with-headers=/tools/include \
+    --enable-obsolete-rpc --cache-file=config.cache
+make
+make install
+
+
+
+
+(16)编译安装Glibc-2.19 64-Bit
+cp -v timezone/Makefile{,.orig}
+sed 's/\\$$(pwd)/`pwd`/' timezone/Makefile.orig > timezone/Makefile
+mkdir -v ../glibc-build
+cd ../glibc-build
+echo "libc_cv_ssp=no" > config.cache
+echo "slibdir=/tools/lib64" >> configparms
+BUILD_CC="gcc" CC="${CLFS_TARGET}-gcc ${BUILD64}" \
+    AR="${CLFS_TARGET}-ar" RANLIB="${CLFS_TARGET}-ranlib" \
+    ../glibc-2.19/configure --prefix=/tools \
+    --host=${CLFS_TARGET} --build=${CLFS_HOST} --libdir=/tools/lib64 \
+    --disable-profile --enable-kernel=2.6.32 \
+    --with-binutils=/cross-tools/bin --with-headers=/tools/include \
+    --enable-obsolete-rpc --cache-file=config.cache
+make
+make install
+
+
+
+(17)编译安装Cross GCC-4.8.3 - Final
+patch -Np1 -i ../gcc-4.8.3-branch_update-1.patch
+patch -Np1 -i ../gcc-4.8.3-specs-1.patch
+echo -en '\n#undef STANDARD_STARTFILE_PREFIX_1\n#define STANDARD_STARTFILE_PREFIX_1 "/tools/lib/"\n' >> gcc/config/linux.h
+echo -en '\n#undef STANDARD_STARTFILE_PREFIX_2\n#define STANDARD_STARTFILE_PREFIX_2 ""\n' >> gcc/config/linux.h
+mkdir -v ../gcc-build
+cd ../gcc-build
+AR=ar LDFLAGS="-Wl,-rpath,/cross-tools/lib" \
+    ../gcc-4.8.3/configure --prefix=/cross-tools \
+    --build=${CLFS_HOST} --target=${CLFS_TARGET} --host=${CLFS_HOST} \
+    --with-sysroot=${CLFS} --with-local-prefix=/tools \
+    --with-native-system-header-dir=/tools/include \
+    --disable-nls --disable-static --enable-languages=c,c++ \
+    --enable-__cxa_atexit --enable-threads=posix --with-mpc=/cross-tools \
+    --with-mpfr=/cross-tools --with-gmp=/cross-tools --with-cloog=/cross-tools \
+    --with-isl=/cross-tools --with-system-zlib --enable-checking=release \
+    --enable-libstdcxx-time
+make AS_FOR_TARGET="${CLFS_TARGET}-as" LD_FOR_TARGET="${CLFS_TARGET}-ld"
+make install
+
+
+
+
+(18)备份与恢复
+(a)
+mount /dev/sda1 /mnt/lfs
+cd /mnt/lfs
+ls
+find . | cpio -coB > /zb/clfs/clfs3.0.0_systemd_MultiLib_chapter5_ok.cpio         ###备份
+umount /mnt/lfs
+
+
+(b)
+fdisk -l
+fdisk /dev/sda
+mount /dev/sda1 /mnt/lfs
+cd /mnt/lfs
+ls
+cpio -icdu < /zb/clfs/clfs3.0.0_systemd_MultiLib_chapter5_ok.cpio                 ###恢复
+ls
+
+
+
+
+
+3. 编译基本(临时)工具链
+==============================================================================================
+(0)
+export CC="${CLFS_TARGET}-gcc ${BUILD64}"
+export CXX="${CLFS_TARGET}-g++ ${BUILD64}"
+export AR="${CLFS_TARGET}-ar"
+export AS="${CLFS_TARGET}-as"
+export RANLIB="${CLFS_TARGET}-ranlib"
+export LD="${CLFS_TARGET}-ld"
+export STRIP="${CLFS_TARGET}-strip"
+
+echo export CC=\""${CC}\"" >> ~/.bashrc_NEW
+echo export CXX=\""${CXX}\"" >> ~/.bashrc_NEW
+echo export AR=\""${AR}\"" >> ~/.bashrc_NEW
+echo export AS=\""${AS}\"" >> ~/.bashrc_NEW
+echo export RANLIB=\""${RANLIB}\"" >> ~/.bashrc_NEW
+echo export LD=\""${LD}\"" >> ~/.bashrc_NEW
+echo export STRIP=\""${STRIP}\"" >> ~/.bashrc_NEW
+
+
+-----------------------.bashrc_NEW 真正的内容-----------------------------------
+set +h
+umask 022
+CLFS=/mnt/clfs
+LC_ALL=POSIX
+PATH=/cross-tools/bin:/bin:/usr/bin
+export CLFS LC_ALL PATH
+unset CFLAGS CXXFLAGS
+
+export CLFS_HOST="x86_64-cross-linux-gnu"
+export CLFS_TARGET="x86_64-unknown-linux-gnu"
+export CLFS_TARGET32="i686-pc-linux-gnu"
+export BUILD32="-m32"
+export BUILD64="-m64"
+
+export CC="x86_64-unknown-linux-gnu-gcc -m64"
+export CXX="x86_64-unknown-linux-gnu-g++ -m64"
+export AR="x86_64-unknown-linux-gnu-ar"
+export AS="x86_64-unknown-linux-gnu-as"
+export RANLIB="x86_64-unknown-linux-gnu-ranlib"
+export LD="x86_64-unknown-linux-gnu-ld"
+export STRIP="x86_64-unknown-linux-gnu-strip"
+
+
+
+-----------------------------------------------------------------------
+
+(1)编译安装 GMP-6.0.0
+CC_FOR_BUILD=gcc ./configure --prefix=/tools \
+    --build=${CLFS_HOST} --host=${CLFS_TARGET} \
+    --libdir=/tools/lib64 --enable-cxx
+make
+make install
+
+
+
+
+(2)编译安装MPFR-3.1.2
+patch -Np1 -i ../mpfr-3.1.2-fixes-4.patch
+./configure --prefix=/tools \
+    --build=${CLFS_HOST} --host=${CLFS_TARGET} \
+    --libdir=/tools/lib64
+make
+make install
+
+
+
+(3)编译安装MPC-1.0.2
+./configure --prefix=/tools \
+    --build=${CLFS_HOST} --host=${CLFS_TARGET} \
+    --libdir=/tools/lib64
+make
+make install
+
+
+
+
+-----------------------------------------------------------------------
+
+(4)编译安装ISL-0.12.2
+./configure --prefix=/tools \
+    --build=${CLFS_HOST} --host=${CLFS_TARGET} \
+    --libdir=/tools/lib64
+make
+make install
+
+
+
+(5)编译安装 CLooG-0.18.2
+./configure --prefix=/tools \
+    --build=${CLFS_HOST} --host=${CLFS_TARGET}  --libdir=/tools/lib64 \
+     --with-isl=system
+cp -v Makefile{,.orig}
+sed '/cmake/d' Makefile.orig > Makefile
+make
+make install
+
+
+
+(6)编译安装Zlib-1.2.8
+./configure --prefix=/tools --libdir=/tools/lib64
+make
+make install
+
+
+---------------------------------------------------------------------------
+find . | cpio -coB > /zb/clfs/clfs3.0.0_systemd_MultiLib_chapter6_zlib_ok.cpio         ###备份
+---------------------------------------------------------------------------
+
+
+(7)编译安装Binutils-2.24
+mkdir -v ../binutils-build
+cd ../binutils-build
+../binutils-2.24/configure \
+    --prefix=/tools --libdir=/tools/lib64 --with-lib-path=/tools/lib64:/tools/lib \
+    --build=${CLFS_HOST} --host=${CLFS_TARGET} --target=${CLFS_TARGET} \
+    --disable-nls --enable-shared --enable-64-bit-bfd
+make
+make install
+
+
+
+(8)编译安装GCC-4.8.3
+patch -Np1 -i ../gcc-4.8.3-branch_update-1.patch
+patch -Np1 -i ../gcc-4.8.3-specs-1.patch
+echo -en '\n#undef STANDARD_STARTFILE_PREFIX_1\n#define STANDARD_STARTFILE_PREFIX_1 "/tools/lib/"\n' >> gcc/config/linux.h
+echo -en '\n#undef STANDARD_STARTFILE_PREFIX_2\n#define STANDARD_STARTFILE_PREFIX_2 ""\n' >> gcc/config/linux.h
+cp -v gcc/Makefile.in{,.orig}
+sed 's@\./fixinc\.sh@-c true@' gcc/Makefile.in.orig > gcc/Makefile.in
+mkdir -v ../gcc-build
+cd ../gcc-build
+../gcc-4.8.3/configure --prefix=/tools \
+    --libdir=/tools/lib64 --build=${CLFS_HOST} --host=${CLFS_TARGET} \
+    --target=${CLFS_TARGET} --with-local-prefix=/tools --disable-nls \
+    --enable-languages=c,c++ --disable-libstdcxx-pch \
+    --with-system-zlib --with-native-system-header-dir=/tools/include \
+    --disable-libssp --enable-libstdcxx-time --enable-checking=release
+cp -v Makefile{,.orig}
+sed "/^HOST_\(GMP\|ISL\|CLOOG\)\(LIBS\|INC\)/s:/tools:/cross-tools:g" \
+    Makefile.orig > Makefile
+make AS_FOR_TARGET="${AS}" LD_FOR_TARGET="${LD}"
+make install
+cp -v ../gcc-4.8.3/include/libiberty.h /tools/include
+
+
+-------------------------------------------------------------------------------------------------------------------------
+
+(9)编译安装Ncurses-5.9
+patch -Np1 -i ../ncurses-5.9-bash_fix-1.patch		###必须安装这个补丁包, 否则将来执行ldd /tools/bin/bash, Error!!!
+
+./configure --prefix=/tools --with-shared \
+   --build=${CLFS_HOST} --host=${CLFS_TARGET} \
+   --without-debug --without-ada \
+   --enable-overwrite --with-build-cc=gcc \
+   --libdir=/tools/lib64
+make
+make install
+
+
+
+(10)编译安装 Bash-4.3
+patch -Np1 -i ../bash-4.3-branch_update-5.patch
+
+cat > config.cache << "EOF"
+ac_cv_func_mmap_fixed_mapped=yes
+ac_cv_func_strcoll_works=yes
+ac_cv_func_working_mktime=yes
+bash_cv_func_sigsetjmp=present
+bash_cv_getcwd_malloc=yes
+bash_cv_job_control_missing=present
+bash_cv_printf_a_format=yes
+bash_cv_sys_named_pipes=present
+bash_cv_ulimit_maxfds=yes
+bash_cv_under_sys_siglist=yes
+bash_cv_unusable_rtsigs=no
+gt_cv_int_divbyzero_sigfpe=yes
+EOF
+
+
+./configure --prefix=/tools \
+    --build=${CLFS_HOST} --host=${CLFS_TARGET} \
+    --without-bash-malloc --cache-file=config.cache
+make
+make install
+
+
+
+
+(11)编译安装Bzip2-1.0.6
+cp -v Makefile{,.orig}
+sed -e 's@^\(all:.*\) test@\1@g' -e 's@/lib\(/\| \|$\)@/lib64\1@g' Makefile.orig > Makefile
+make CC="${CC}" AR="${AR}" RANLIB="${RANLIB}"
+make PREFIX=/tools install
+
+
+
+(12)编译安装Check-0.9.13
+./configure --prefix=/tools --build=${CLFS_HOST} --host=${CLFS_TARGET}  --libdir=/tools/lib64
+make
+make install
+
+
+-------------------------------------------------------------------------------------------------
+#ldd /tools/bin/bash   #If possible, Test it!
+-------------------------------------------------------------------------------------------------
+
+
+(13)编译安装Coreutils-8.22 (Recompile it, if recompiled ncurses!!!)
+cat > config.cache << EOF
+fu_cv_sys_stat_statfs2_bsize=yes
+gl_cv_func_working_mkstemp=yes
+EOF
+
+
+
+patch -Np1 -i ../coreutils-8.22-noman-1.patch
+
+./configure --prefix=/tools \
+    --build=${CLFS_HOST} --host=${CLFS_TARGET} \
+    --enable-install-program=hostname --cache-file=config.cache
+make
+make install
+
+
+Note:
+It installs /mnt/clfs/tools/bin/env        ###If possible, Test it! ldd env
+
+-------------------------------------------------------------------------------------------------
+find . | cpio -coB > /zb/clfs/clfs3.0.0_systemd_MultiLib_chapter6_coreutils_ok.cpio         ###备份
+-------------------------------------------------------------------------------------------------
+
+
+(14)编译安装Diffutils-3.3
+./configure --prefix=/tools --build=${CLFS_HOST} --host=${CLFS_TARGET}
+make
+make install
+
+
+
+(15)编译安装File-5.19
+./configure --prefix=/tools --libdir=/tools/lib64 --build=${CLFS_HOST} --host=${CLFS_TARGET}
+make
+make install
+
+
+
+
+(16)编译安装Findutils-4.4.2
+echo "gl_cv_func_wcwidth_works=yes" > config.cache
+echo "ac_cv_func_fnmatch_gnu=yes" >> config.cache
+./configure --prefix=/tools \
+    --build=${CLFS_HOST} --host=${CLFS_TARGET} \
+    --cache-file=config.cache
+make
+make install
+
+
+---------------------------------------------------------------
+
+
+(17)编译安装Gawk-4.1.1
+./configure --prefix=/tools --build=${CLFS_HOST} --host=${CLFS_TARGET}
+make
+make install
+
+
+
+(18)编译安装Gettext-0.19.1
+cd gettext-tools
+echo "gl_cv_func_wcwidth_works=yes" > config.cache
+./configure --prefix=/tools \
+    --build=${CLFS_HOST} --host=${CLFS_TARGET} \
+    --disable-shared --cache-file=config.cache
+make -C gnulib-lib
+make -C src msgfmt msgmerge xgettext
+cp -v src/{msgfmt,msgmerge,xgettext} /tools/bin
+
+
+(19)编译安装Grep-2.19
+./configure --prefix=/tools \
+    --build=${CLFS_HOST} --host=${CLFS_TARGET} \
+    --without-included-regex
+make
+make install
+
+
+
+(20)编译安装Gzip-1.6
+./configure --prefix=/tools --build=${CLFS_HOST} --host=${CLFS_TARGET}
+make
+make install
+
+
+
+-------------------------------------------------------------------------------------------------
+find . | cpio -coB > /zb/clfs/clfs3.0.0_systemd_MultiLib_chapter6_gzip_ok.cpio         ###备份
+-------------------------------------------------------------------------------------------------
+
+
+
+(21)编译安装 Make-4.0
+./configure --prefix=/tools --build=${CLFS_HOST} --host=${CLFS_TARGET}
+make
+make install
+
+
+
+(22)编译安装Patch-2.7.1
+./configure --prefix=/tools --build=${CLFS_HOST} --host=${CLFS_TARGET}
+make
+make install
+
+
+
+(23)编译安装Sed-4.2.2
+./configure --prefix=/tools --build=${CLFS_HOST} --host=${CLFS_TARGET}
+make
+make install
+
+
+---------------------------------------------------------------------------
+
+(24)编译安装Tar-1.27.1
+cat > config.cache << EOF
+gl_cv_func_wcwidth_works=yes
+gl_cv_func_btowc_eof=yes
+ac_cv_func_malloc_0_nonnull=yes
+gl_cv_func_mbrtowc_incomplete_state=yes
+gl_cv_func_mbrtowc_nul_retval=yes
+gl_cv_func_mbrtowc_null_arg1=yes
+gl_cv_func_mbrtowc_null_arg2=yes
+gl_cv_func_mbrtowc_retval=yes
+gl_cv_func_wcrtomb_retval=yes
+EOF
+
+
+./configure --prefix=/tools \
+    --build=${CLFS_HOST} --host=${CLFS_TARGET} \
+    --cache-file=config.cache
+make
+make install
+
+
+
+
+
+(25)编译安装Texinfo-5.2
+PERL=/usr/bin/perl ./configure --prefix=/tools --build=${CLFS_HOST} --host=${CLFS_TARGET}
+make
+make install
+
+
+
+(26)编译安装Util-linux-2.24.2
+./configure --prefix=/tools \
+    --build=${CLFS_HOST} --host=${CLFS_TARGET} \
+    --libdir='${prefix}'/lib64 --disable-makeinstall-chown \
+    --disable-makeinstall-setuid
+make
+make install
+
+
+----------------------------------------------------------------------------------------------------
+find . | cpio -coB > /zb/clfs/clfs3.0.0_systemd_MultiLib_chapter6_util-linux_ok.cpio         ###备份
+----------------------------------------------------------------------------------------------------
+
+
+
+
+(27)编译安装XZ Utils-5.0.5
+./configure --prefix=/tools \
+     --build=${CLFS_HOST} --host=${CLFS_TARGET} \
+     --libdir=/tools/lib64
+make
+make install
+
+
+
+
+
+(28)编译安装Vim-7.4
+patch -Np1 -i ../vim-7.4-branch_update-7.patch
+
+
+cat > src/auto/config.cache << "EOF"
+vim_cv_getcwd_broken=no
+vim_cv_memmove_handles_overlap=yes
+vim_cv_stat_ignores_slash=no
+vim_cv_terminfo=yes
+vim_cv_toupper_broken=no
+vim_cv_tty_group=world
+EOF
+
+
+echo '#define SYS_VIMRC_FILE "/tools/etc/vimrc"' >> src/feature.h
+./configure --build=${CLFS_HOST} --host=${CLFS_TARGET} \
+    --prefix=/tools --enable-gui=no --disable-gtktest --disable-xim \
+    --disable-gpm --without-x --disable-netbeans --with-tlib=ncurses
+make
+make install
+ln -sv vim /tools/bin/vi
+
+
+cat > /tools/etc/vimrc << "EOF"
+" Begin /tools/etc/vimrc
+
+set nocompatible
+set backspace=2
+set ruler
+syntax on
+
+" End /tools/etc/vimrc
+EOF
+
+-------------------------------------------------------------------------------------------------
+find . | cpio -coB > /zb/clfs/clfs3.0.0_systemd_MultiLib_chapter6_ok.cpio         ###备份
+-------------------------------------------------------------------------------------------------
+
+
+
+(29) Boot or Chroot?
+------------------ Test the following command-------------------------------------
+/tools/lib/libc.so.6
+/tools/lib64/libc.so.6
+/tools/bin/gcc -v
+----------------------------------------------------------------------------------
+
+
+
+
+
+
+4. 构建chroot环境
+==============================================================================================
+(0)
+mkdir -pv ${CLFS}/{dev,proc,run,sys}
+mknod -m 600 ${CLFS}/dev/console c 5 1
+mknod -m 666 ${CLFS}/dev/null c 1 3
+
+mount -v -o bind /dev ${CLFS}/dev
+mount -vt devpts -o gid=5,mode=620 devpts ${CLFS}/dev/pts
+mount -vt proc proc ${CLFS}/proc
+mount -vt tmpfs tmpfs ${CLFS}/run
+mount -vt sysfs sysfs ${CLFS}/sys
+
+[ -h ${CLFS}/dev/shm ] && mkdir -pv ${CLFS}/$(readlink ${CLFS}/dev/shm)    ###Don't execute!
+
+
+
+(1)进入chroot环境
+----------------------------------------------------------
+chroot "${CLFS}" /tools/bin/env -i \
+    HOME=/root TERM="${TERM}" PS1='\u:\w\$ ' \
+    PATH=/bin:/usr/bin:/sbin:/usr/sbin:/tools/bin \
+    /tools/bin/bash --login +h
+---------------------成功啦--------------------------------------
+I have no name!:/#
+----------------------------------------------------------
+
+
+(2)
+I have no name!:/#
+----------------------------------------------------------
+
+mkdir -pv /{bin,boot,dev,{etc/,}opt,home,lib{,64},mnt}
+mkdir -pv /{proc,media/{floppy,cdrom},run/{,shm},sbin,srv,sys}
+mkdir -pv /var/{lock,log,mail,spool}
+mkdir -pv /var/{opt,cache,lib{,64}/{misc,locate},local}
+install -dv /root -m 0750
+install -dv {/var,}/tmp -m 1777
+ln -sv ../run /var/run
+mkdir -pv /usr/{,local/}{bin,include,lib{,64},sbin,src}
+mkdir -pv /usr/{,local/}share/{doc,info,locale,man}
+mkdir -pv /usr/{,local/}share/{misc,terminfo,zoneinfo}
+mkdir -pv /usr/{,local/}share/man/man{1..8}
+install -dv /usr/lib/locale
+ln -sv ../lib/locale /usr/lib64
+
+
+
+(3)
+ln -sv /tools/bin/{bash,cat,echo,grep,pwd,stty} /bin
+ln -sv /tools/bin/file /usr/bin
+ln -sv /tools/lib/libgcc_s.so{,.1} /usr/lib
+ln -sv /tools/lib64/libgcc_s.so{,.1} /usr/lib64
+ln -sv /tools/lib/libstd* /usr/lib
+ln -sv /tools/lib64/libstd* /usr/lib64
+ln -sv bash /bin/sh
+
+
+(4)环境变量
+export BUILD32="-m32"
+export BUILD64="-m64"
+export CLFS_TARGET32="i686-pc-linux-gnu"
+
+cat >> ${CLFS}/root/.bash_profile << EOF
+export BUILD32="${BUILD32}"
+export BUILD64="${BUILD64}"
+export CLFS_TARGET32="${CLFS_TARGET32}"
+EOF
+
+
+(5)
+cat > /etc/passwd << "EOF"
+root:x:0:0:root:/root:/bin/bash
+bin:x:1:1:/bin:/bin/false
+daemon:x:2:6:/sbin:/bin/false
+messagebus:x:27:27:D-Bus Message Daemon User:/dev/null:/bin/false
+nobody:x:65534:65533:Unprivileged User:/dev/null:/bin/false
+EOF
+
+
+cat > /etc/group << "EOF"
+root:x:0:
+bin:x:1:
+sys:x:2:
+kmem:x:3:
+tty:x:5:
+tape:x:4:
+daemon:x:6:
+floppy:x:7:
+disk:x:8:
+lp:x:9:
+dialout:x:10:
+audio:x:11:
+video:x:12:
+utmp:x:13:
+usb:x:14:
+cdrom:x:15:
+adm:x:16:
+messagebus:x:27:
+systemd-journal:x:28:
+mail:x:30:
+wheel:x:39:
+nogroup:x:65533:
+EOF
+
+
+
+(6)临时退出chroot命令行后的重新进入
+exit
+-----------------------------------------------------------
+chroot "${CLFS}" /tools/bin/env -i \
+    HOME=/root TERM="${TERM}" PS1='\u:\w\$ ' \
+    PATH=/bin:/usr/bin:/sbin:/usr/sbin:/tools/bin \
+    /tools/bin/bash --login +h
+-----------------------------------------------------------
+root:/#
+-----------------------------------------------------------
+source /root/.bash_profile
+-----------------------------------------------------------
+
+
+
+
+
+5. 构建测试工具
+==============================================================================================
+
+(1)Tcl-8.6.1
+sed -i s/500/5000/ generic/regc_nfa.c
+cd unix
+CC="gcc ${BUILD64}" ./configure --prefix=/tools --libdir=/tools/lib64
+make
+make install
+make install-private-headers
+ln -sv tclsh8.6 /tools/bin/tclsh
+
+
+
+
+(2)Expect-5.45
+CC="gcc ${BUILD64}" ./configure --prefix=/tools \
+   --with-tcl=/tools/lib64 --with-tclinclude=/tools/include  \
+   --libdir=/tools/lib64
+make
+make SCRIPTS="" install
+
+
+
+
+(3)DejaGNU-1.5.1
+./configure --prefix=/tools
+make install
+
+
+
+(4)重新启动PC后的备份
+mount /dev/sda1 /mnt/clfs
+cd /mnt/clfs
+
+------------------------------------------------------------------------------------
+find . | cpio -coB > /zb/clfs/clfs3.0.0_systemd_MultiLib_chapter9_ok.cpio         ###备份
+------------------------------------------------------------------------------------
+
+
+
+
+
+
+(5)重新启动PC, 重新进入chroot环境
+--------------------------------------------------------------
+mount /dev/sda1 /mnt/clfs
+--------------------------------------------------------------
+
+source /root/.bash_profile_NEW
+source /root/.bashrc_NEW
+
+mount -v -o bind /dev ${CLFS}/dev
+mount -vt devpts -o gid=5,mode=620 devpts ${CLFS}/dev/pts
+mount -vt proc proc ${CLFS}/proc
+mount -vt tmpfs tmpfs ${CLFS}/run
+mount -vt sysfs sysfs ${CLFS}/sys
+
+chroot "${CLFS}" /tools/bin/env -i \
+    HOME=/root TERM="${TERM}" PS1='\u:\w\$ ' \
+    PATH=/bin:/usr/bin:/sbin:/usr/sbin:/tools/bin \
+    /tools/bin/bash --login +h
+
+source /root/.bash_profile
+
+-----------------------------------------------------
+
+
+
+
+
+
+
+
+
+6. 构建CLFS基本系统 (Corresponding to Chapter10, 编译安装正式工具链)
+==============================================================================================
+==============================================================================================
+(1)
+Target tool chains will NOT depend on /tools, so don't compile the packages in paralell!!!
+
+
+
+(2)Temporary Perl-5.20.0
+sed -i 's@/usr/include@/tools/include@g' ext/Errno/Errno_pm.PL
+./configure.gnu --prefix=/tools  -Dcc="gcc ${BUILD32}"
+make
+make install
+ln -sfv /tools/bin/perl /usr/bin
+
+
+
+(3)Linux-3.14.21 Headers
+xzcat ../patch-3.14.21.xz | patch -Np1 -i -
+make mrproper
+make headers_check
+make INSTALL_HDR_PATH=/usr headers_install
+find /usr/include -name .install -or -name ..install.cmd | xargs rm -fv
+
+
+
+(4)Man-pages-3.68
+https://git.kernel.org/pub/scm/docs/man-pages/man-pages.git/refs/tags  ###download man-pages-3.68.tar.gz
+make install
+
+
+
+
+
+(5)Glibc-2.19 32 Bit Libraries (耗时大约25分钟)
+--------------------------------------
+LINKER=$(readelf -l /tools/bin/bash | sed -n 's@.*interpret.*/tools\(.*\)]$@\1@p')
+sed -i "s|libs -o|libs -L/usr/lib -Wl,-dynamic-linker=${LINKER} -o|" \
+  scripts/test-installation.pl
+unset LINKER
+sed -i 's/\\$$(pwd)/`pwd`/' timezone/Makefile
+mkdir -v ../glibc-build
+cd ../glibc-build
+
+CC="gcc ${BUILD32}" CXX="g++ ${BUILD32}" \
+    ../glibc-2.19/configure --prefix=/usr \
+    --disable-profile --enable-kernel=2.6.32 \
+    --libexecdir=/usr/lib/glibc --host=${CLFS_TARGET32} \
+    --enable-obsolete-rpc
+
+make
+
+sed -i '/cross-compiling/s@ifeq@ifneq@g' ../glibc-2.19/localedata/Makefile
+make -k check 2>&1 | tee glibc-check-log; grep Error glibc-check-log
+
+
+touch /etc/ld.so.conf
+make install && rm -v /usr/include/rpcsvc/*.x
+
+
+
+(6)Glibc-2.19 64-Bit (耗时大约45分钟)
+-----------------------------------------------------------------------------------------
+LINKER=$(readelf -l /tools/bin/bash | sed -n 's@.*interpret.*/tools\(.*\)]$@\1@p')
+sed -i "s|libs -o|libs -L/usr/lib64 -Wl,-dynamic-linker=${LINKER} -o|" \
+  scripts/test-installation.pl
+unset LINKER
+sed -i 's/\\$$(pwd)/`pwd`/' timezone/Makefile
+
+mkdir -v ../glibc-build
+cd ../glibc-build
+
+echo "slibdir=/lib64" >> configparms
+
+CC="gcc ${BUILD64}" CXX="g++ ${BUILD64}" \
+    ../glibc-2.19/configure --prefix=/usr \
+    --disable-profile --enable-kernel=2.6.32 \
+    --libexecdir=/usr/lib64/glibc --libdir=/usr/lib64 \
+    --enable-obsolete-rpc
+
+make
+
+
+
+make -k check 2>&1 | tee glibc-check-log; grep Error glibc-check-log  ### Very very slow, DON'T do it!!!!! Have some errors!!!!
+
+
+
+
+make install && rm -v /usr/include/rpcsvc/*.x
+
+cp -v ../glibc-2.19/nscd/nscd.conf /etc/nscd.conf
+mkdir -pv /var/cache/nscd
+
+install -v -Dm644 ../glibc-2.19/nscd/nscd.tmpfiles /usr/lib/tmpfiles.d/nscd.conf
+install -v -Dm644 ../glibc-2.19/nscd/nscd.service /lib/systemd/system/nscd.service
+
+make localedata/install-locales
+
+mkdir -pv /usr/lib/locale
+localedef -i cs_CZ -f UTF-8 cs_CZ.UTF-8
+localedef -i de_DE -f ISO-8859-1 de_DE
+localedef -i de_DE@euro -f ISO-8859-15 de_DE@euro
+localedef -i en_HK -f ISO-8859-1 en_HK
+localedef -i en_PH -f ISO-8859-1 en_PH
+localedef -i en_US -f ISO-8859-1 en_US
+localedef -i es_MX -f ISO-8859-1 es_MX
+localedef -i fa_IR -f UTF-8 fa_IR
+localedef -i fr_FR -f ISO-8859-1 fr_FR
+localedef -i fr_FR@euro -f ISO-8859-15 fr_FR@euro
+localedef -i it_IT -f ISO-8859-1 it_IT
+localedef -i ja_JP -f EUC-JP ja_JP
+
+
+cat > /etc/nsswitch.conf << "EOF"
+# Begin /etc/nsswitch.conf
+
+passwd: files
+group: files
+shadow: files
+
+hosts: files dns
+networks: files
+
+protocols: files
+services: files
+ethers: files
+rpc: files
+
+# End /etc/nsswitch.conf
+EOF
+
+
+
+tar -xf ../tzdata2014d.tar.gz
+
+ZONEINFO=/usr/share/zoneinfo
+mkdir -pv $ZONEINFO/{posix,right}
+
+for tz in etcetera southamerica northamerica europe africa antarctica  \
+          asia australasia backward pacificnew \
+          systemv; do
+    zic -L /dev/null   -d $ZONEINFO       -y "sh yearistype.sh" ${tz}
+    zic -L /dev/null   -d $ZONEINFO/posix -y "sh yearistype.sh" ${tz}
+    zic -L leapseconds -d $ZONEINFO/right -y "sh yearistype.sh" ${tz}
+done
+
+cp -v zone.tab iso3166.tab $ZONEINFO
+zic -d $ZONEINFO -p America/New_York
+unset ZONEINFO
+
+
+tzselect
+cp -v /usr/share/zoneinfo/Asia/Shanghai /etc/localtime   ###Replace xxx with the output of tzselect
+
+
+
+
+cat > /etc/ld.so.conf << "EOF"
+# Begin /etc/ld.so.conf
+
+/usr/local/lib
+/usr/local/lib64
+/opt/lib
+/opt/lib64
+
+# End /etc/ld.so.conf
+EOF
+
+
+
+------------------------------------------------------------------------------------------------------
+find . | cpio -coB > /zb/clfs/clfs3.0.0_systemd_MultiLib_chapter10_glibc_64bit_ok.cpio         ###备份
+------------------------------------------------------------------------------------------------------
+
+
+
+
+(7)Adjusting the Toolchain
+gcc -dumpspecs | \
+perl -p -e 's@/tools/lib/ld@/lib/ld@g;' \
+     -e 's@/tools/lib64/ld@/lib64/ld@g;' \
+     -e 's@\*startfile_prefix_spec:\n@$_/usr/lib/ @g;' > \
+     $(dirname $(gcc --print-libgcc-file-name))/specs
+
+
+---------------------------------------Test32-------------------------
+echo 'main(){}' > dummy.c
+gcc ${BUILD32} dummy.c
+readelf -l a.out | grep ': /lib'   	### [Requesting program interpreter: /lib/ld-linux.so.2]
+
+
+
+---------------------------------------Test64-------------------------
+echo 'main(){}' > dummy.c
+gcc ${BUILD64} dummy.c
+readelf -l a.out | grep ': /lib'	### [Requesting program interpreter: /lib64/ld-linux-x86-64.so.2]
+
+
+
+
+
+(8)M4-1.4.17
+CC="gcc ${BUILD64}" ./configure --prefix=/usr
+make
+make install
+
+
+
+
+
+(9)GMP-6.0.0 32 Bit Libraries
+-----------------------------------------------
+CC="gcc -isystem /usr/include ${BUILD32}" \
+CXX="g++ -isystem /usr/include ${BUILD32}" \
+LDFLAGS="-Wl,-rpath-link,/usr/lib:/lib ${BUILD32}" \
+  ABI=32 ./configure --prefix=/usr --enable-cxx
+make
+make install
+mv -v /usr/include/gmp{,-32}.h
+
+
+
+
+(10)GMP-6.0.0 64 Bit
+----------------------------------------------------------------
+CC="gcc -isystem /usr/include ${BUILD64}" \
+CXX="g++ -isystem /usr/include ${BUILD64}" \
+LDFLAGS="-Wl,-rpath-link,/usr/lib64:/lib64 ${BUILD64}" \
+  ./configure --prefix=/usr \
+    --libdir=/usr/lib64 --enable-cxx \
+    --docdir=/usr/share/doc/gmp-6.0.0
+make
+make html
+make install
+make install-html
+mv -v /usr/include/gmp{,-64}.h
+
+
+
+cat > /usr/include/gmp.h << "EOF"
+/* gmp.h - Stub Header  */
+#ifndef __STUB__GMP_H__
+#define __STUB__GMP_H__
+
+#if defined(__x86_64__) || \
+    defined(__sparc64__) || \
+    defined(__arch64__) || \
+    defined(__powerpc64__) || \
+    defined (__s390x__)
+# include "gmp-64.h"
+#else
+# include "gmp-32.h"
+#endif
+
+#endif /* __STUB__GMP_H__ */
+EOF
+
+
+
+
+
+(11)MPFR-3.1.2 32 Bit Libraries
+patch -Np1 -i ../mpfr-3.1.2-fixes-4.patch
+CC="gcc -isystem /usr/include ${BUILD32}" \
+    LDFLAGS="-Wl,-rpath-link,/usr/lib:/lib ${BUILD32}" \
+    ./configure --prefix=/usr --host=${CLFS_TARGET32} \
+    --docdir=/usr/share/doc/mpfr-3.1.2
+make
+make install
+
+
+
+
+(12)MPFR-3.1.2 64 Bit
+patch -Np1 -i ../mpfr-3.1.2-fixes-4.patch
+CC="gcc -isystem /usr/include ${BUILD64}" \
+    LDFLAGS="-Wl,-rpath-link,/usr/lib64:/lib64 ${BUILD64}" \
+    ./configure --prefix=/usr --libdir=/usr/lib64 \
+    --docdir=/usr/share/doc/mpfr-3.1.2
+make
+make install
+
+
+
+
+(13)MPC-1.0.2 32 Bit Libraries
+CC="gcc -isystem /usr/include ${BUILD32}" \
+LDFLAGS="-Wl,-rpath-link,/usr/lib:/lib ${BUILD32}" \
+  ./configure --prefix=/usr --host=${CLFS_TARGET32}
+make
+make install
+
+
+(14)MPC-1.0.2 64 Bit
+CC="gcc -isystem /usr/include ${BUILD64}" \
+LDFLAGS="-Wl,-rpath-link,/usr/lib64:/lib64 ${BUILD64}" \
+  ./configure --prefix=/usr --libdir=/usr/lib64 \
+  --docdir=/usr/share/doc/mpc-1.0.2
+make
+make html
+make install
+make install-html
+
+
+------------------------------------------------------------------------------
+
+
+(15)ISL-0.12.2 32 Bit Libraries
+CC="gcc -isystem /usr/include ${BUILD32}" \
+LDFLAGS="-Wl,-rpath-link,/usr/lib:/lib ${BUILD32}" \
+  ./configure --prefix=/usr --host=${CLFS_TARGET32}
+make
+make install
+mkdir -pv /usr/share/gdb/auto-load/usr/lib
+mv -v /usr/lib/libisl*gdb.py /usr/share/gdb/auto-load/usr/lib
+
+
+
+
+(16)ISL-0.12.2 64 Bit
+CC="gcc -isystem /usr/include ${BUILD64}" \
+LDFLAGS="-Wl,-rpath-link,/usr/lib64:/lib64 ${BUILD64}" \
+  ./configure --prefix=/usr --libdir=/usr/lib64
+make
+make install
+mkdir -pv /usr/share/gdb/auto-load/usr/lib64
+mv -v /usr/lib64/*gdb.py /usr/share/gdb/auto-load/usr/lib64
+
+
+
+------------------------------------------------------------------------------
+
+
+
+(17)CLooG-0.18.2 32 Bit Libraries
+CC="gcc -isystem /usr/include ${BUILD32}" \
+LDFLAGS="-Wl,-rpath-link,/usr/lib:/lib ${BUILD32}" \
+  ./configure --prefix=/usr --host=${CLFS_TARGET32} --with-isl=system
+sed -i '/cmake/d' Makefile
+make
+make install
+
+
+
+
+(18)CLooG-0.18.2 64 Bit
+CC="gcc -isystem /usr/include ${BUILD64}" \
+LDFLAGS="-Wl,-rpath-link,/usr/lib64:/lib64 ${BUILD64}" \
+  ./configure --prefix=/usr --libdir=/usr/lib64 --with-isl=system
+sed -i '/cmake/d' Makefile
+make
+make install
+
+
+------------------------------------------------------------------------------
+
+
+(19)Zlib-1.2.8 32 Bit Libraries
+CC="gcc -isystem /usr/include ${BUILD32}" \
+CXX="g++ -isystem /usr/include ${BUILD32}" \
+LDFLAGS="-Wl,-rpath-link,/usr/lib:/lib ${BUILD32}" \
+  ./configure --prefix=/usr
+make
+make install
+mv -v /usr/lib/libz.so.* /lib
+ln -sfv ../../lib/$(readlink /usr/lib/libz.so) /usr/lib/libz.so
+
+
+
+
+
+(20)Zlib-1.2.8 64 Bit
+CC="gcc -isystem /usr/include ${BUILD64}" \
+CXX="g++ -isystem /usr/include ${BUILD64}" \
+LDFLAGS="-Wl,-rpath-link,/usr/lib64:/lib64 ${BUILD64}" \
+  ./configure --prefix=/usr --libdir=/usr/lib64
+make
+make install
+mv -v /usr/lib64/libz.so.* /lib64
+ln -sfv ../../lib64/$(readlink /usr/lib64/libz.so) /usr/lib64/libz.so
+mkdir -pv /usr/share/doc/zlib-1.2.8
+cp -rv doc/* examples /usr/share/doc/zlib-1.2.8
+
+
+------------------------------------------------------------------------------
+
+
+(21)Flex-2.5.39 32 Bit Libraries
+CC="gcc ${BUILD32}" ./configure --prefix=/usr \
+    --docdir=/usr/share/doc/flex-2.5.39
+make
+make install
+
+
+
+
+
+(22)Flex-2.5.39 64 Bit
+CC="gcc ${BUILD64}" ./configure --prefix=/usr \
+    --libdir=/usr/lib64 --docdir=/usr/share/doc/flex-2.5.39
+make
+make install
+
+cat > /usr/bin/lex << "EOF"
+#!/bin/sh
+# Begin /usr/bin/lex
+
+exec /usr/bin/flex -l "$@"
+
+# End /usr/bin/lex
+EOF
+chmod -v 755 /usr/bin/lex
+
+
+------------------------------------------------------------------------------
+
+
+
+(23)Bison-3.0.2 32 Bit Libraries
+CC="gcc ${BUILD32}" CXX="g++ ${BUILD32}" \
+    ./configure --prefix=/usr
+make
+make install
+
+
+
+(24)Bison-3.0.2 64Bit
+CC="gcc ${BUILD64}" CXX="g++ ${BUILD64}" \
+    ./configure --prefix=/usr --libdir=/usr/lib64
+make
+make install
+
+
+------------------------------------------------------------------------------
+
+
+(25)Binutils-2.24
+expect -c "spawn ls"    	### spawn ls
+mkdir -v ../binutils-build
+cd ../binutils-build
+CC="gcc -isystem /usr/include ${BUILD64}" \
+LDFLAGS="-Wl,-rpath-link,/usr/lib64:/lib64:/usr/lib:/lib ${BUILD64}" \
+  ../binutils-2.24/configure --prefix=/usr \
+    --enable-shared --enable-64-bit-bfd --libdir=/usr/lib64
+make tooldir=/usr
+
+
+make check			###
+make tooldir=/usr install
+
+
+------------------------------------------------------------------------------
+
+
+
+(26)GCC-4.8.3
+patch -Np1 -i ../gcc-4.8.3-branch_update-1.patch
+sed -i 's@\./fixinc\.sh@-c true@' gcc/Makefile.in
+mkdir -v ../gcc-build
+cd ../gcc-build
+
+
+### Very Important:  We should put them in one line!!!
+SED=sed CC="gcc -isystem /usr/include ${BUILD64}" CXX="g++ -isystem /usr/include ${BUILD64}" LDFLAGS="-Wl,-rpath-link,/usr/lib64:/lib64:/usr/lib:/lib" ../gcc-4.8.3/configure --prefix=/usr --libdir=/usr/lib64 --libexecdir=/usr/lib64 --enable-threads=posix --enable-__cxa_atexit --enable-clocale=gnu --enable-languages=c,c++ --disable-libstdcxx-pch --with-system-zlib --enable-checking=release --enable-libstdcxx-time
+
+
+make
+ulimit -s 32768
+make -k check              ### Very very slow!!! Don't do it!
+../gcc-4.8.3/contrib/test_summary
+make install
+cp -v ../gcc-4.8.3/include/libiberty.h /usr/include
+ln -sv ../usr/bin/cpp /lib
+mv -v /usr/lib/libstdc++*gdb.py /usr/share/gdb/auto-load/usr/lib
+mv -v /usr/lib64/libstdc++*gdb.py /usr/share/gdb/auto-load/usr/lib64
+
+
+
+
+
+(27)Creating a Multiarch Wrapper
+cat > multiarch_wrapper.c << "EOF"
+#define _GNU_SOURCE
+
+#include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
+#ifndef DEF_SUFFIX
+#  define DEF_SUFFIX "64"
+#endif
+
+int main(int argc, char **argv)
+{
+  char *filename;
+  char *suffix;
+
+  if(!(suffix = getenv("USE_ARCH")))
+    if(!(suffix = getenv("BUILDENV")))
+      suffix = DEF_SUFFIX;
+
+  if (asprintf(&filename, "%s-%s", argv[0], suffix) < 0) {
+    perror(argv[0]);
+    return -1;
+  }
+
+  int status = EXIT_FAILURE;
+  pid_t pid = fork();
+
+  if (pid == 0) {
+    execvp(filename, argv);
+    perror(filename);
+  } else if (pid < 0) {
+    perror(argv[0]);
+  } else {
+    if (waitpid(pid, &status, 0) != pid) {
+      status = EXIT_FAILURE;
+      perror(argv[0]);
+    } else {
+      status = WEXITSTATUS(status);
+    }
+  }
+
+  free(filename);
+
+  return status;
+}
+
+EOF
+
+
+gcc ${BUILD64} multiarch_wrapper.c -o /usr/bin/multiarch_wrapper
+
+echo 'echo "32bit Version"' > test-32
+echo 'echo "64bit Version"' > test-64
+chmod -v 755 test-32 test-64
+ln -sv /usr/bin/multiarch_wrapper test
+
+USE_ARCH=32 ./test	### 32bit Version
+USE_ARCH=64 ./test	### 64bit Version
+
+rm -v multiarch_wrapper.c test{,-32,-64}
+
+
+---------------------------------------------------------------------------------
+
+(28)Attr-2.4.47 32 Bit Libraries
+sed -i -e 's|/@pkg_name@|&-@pkg_version@|' include/builddefs.in
+CC="gcc ${BUILD32}" ./configure \
+    --prefix=/usr --libdir=/lib \
+    --libexecdir=/usr/lib
+make
+make install install-dev install-lib
+ln -sfv ../../lib/$(readlink /lib/libattr.so) /usr/lib/libattr.so
+rm -v /lib/libattr.so
+chmod 755 -v /lib/libattr.so.1.1.0
+
+
+
+
+
+
+(29)Attr-2.4.47 64 Bit
+sed -i -e 's|/@pkg_name@|&-@pkg_version@|' include/builddefs.in
+CC="gcc ${BUILD64}" ./configure \
+    --prefix=/usr --libdir=/lib64 \
+    --libexecdir=/usr/lib64
+make
+make install install-dev install-lib
+ln -sfv ../../lib64/$(readlink /lib64/libattr.so) /usr/lib64/libattr.so
+rm -v /lib64/libattr.so
+chmod 755 -v /lib64/libattr.so.1.1.0
+
+
+---------------------------------------------------------------------------------
+
+
+(30)Acl-2.2.52 32 Bit Libraries
+sed -i -e 's|/@pkg_name@|&-@pkg_version@|' include/builddefs.in
+sed -i "s:| sed.*::g" test/{sbits-restore,cp,misc}.test
+CC="gcc ${BUILD32}" ./configure \
+    --prefix=/usr --libdir=/lib \
+    --libexecdir=/usr/lib
+make
+make install install-dev install-lib
+ln -sfv ../../lib/$(readlink /lib/libacl.so) /usr/lib/libacl.so
+rm -v /lib/libacl.so
+chmod 755 -v /lib/libacl.so.1.1.0
+
+
+
+
+(31)Acl-2.2.52 64 Bit
+sed -i -e 's|/@pkg_name@|&-@pkg_version@|' include/builddefs.in
+sed -i "s:| sed.*::g" test/{sbits-restore,cp,misc}.test
+CC="gcc ${BUILD64}" ./configure \
+    --prefix=/usr --libdir=/lib64 \
+    --libexecdir=/usr/lib64
+make
+make install install-dev install-lib
+ln -sfv ../../lib64/$(readlink /lib64/libacl.so) /usr/lib64/libacl.so
+rm -v /lib64/libacl.so
+chmod 755 -v /lib64/libacl.so.1.1.0
+
+
+---------------------------------------------------------------------------------
+
+
+(32)Sed-4.2.2
+CC="gcc ${BUILD64}" ./configure --prefix=/usr \
+   --bindir=/bin --docdir=/usr/share/doc/sed-4.2.2
+make
+make html
+make install
+make -C doc install-html
+
+
+
+
+(33)Pkg-config-lite-0.28-1
+CC="gcc ${BUILD64}" ./configure --prefix=/usr \
+    --docdir=/usr/share/doc/pkg-config-0.28-1 --with-pc-path=/usr/share/pkgconfig
+make
+make install
+export PKG_CONFIG_PATH32="/usr/lib/pkgconfig"
+export PKG_CONFIG_PATH64="/usr/lib64/pkgconfig"
+
+cat >> /root/.bash_profile << EOF
+export PKG_CONFIG_PATH32="${PKG_CONFIG_PATH32}"
+export PKG_CONFIG_PATH64="${PKG_CONFIG_PATH64}"
+EOF
+
+
+---------------------------------------------------------------------------------
+
+
+(34)Ncurses-5.9 32 Bit Libraries
+patch -Np1 -i ../ncurses-5.9-branch_update-4.patch
+CC="gcc ${BUILD32}" CXX="g++ ${BUILD32}" \
+   ./configure --prefix=/usr --libdir=/lib \
+   --with-shared --without-debug --enable-widec \
+   --with-manpage-format=normal --enable-pc-files \
+   --with-default-terminfo-dir=/usr/share/terminfo
+make
+make install
+mv -v /usr/bin/ncursesw5-config{,-32}
+mv -v /lib/lib{panelw,menuw,formw,ncursesw,ncurses++w}.a /usr/lib
+ln -svf ../../lib/$(readlink /lib/libncursesw.so) /usr/lib/libncursesw.so
+ln -svf ../../lib/$(readlink /lib/libmenuw.so) /usr/lib/libmenuw.so
+ln -svf ../../lib/$(readlink /lib/libpanelw.so) /usr/lib/libpanelw.so
+ln -svf ../../lib/$(readlink /lib/libformw.so) /usr/lib/libformw.so
+rm -v /lib/lib{ncursesw,menuw,panelw,formw}.so
+
+for lib in curses ncurses form panel menu ; do
+        echo "INPUT(-l${lib}w)" > /usr/lib/lib${lib}.so
+        ln -sfv lib${lib}w.a /usr/lib/lib${lib}.a
+done
+ln -sfv libcurses.so /usr/lib/libcursesw.so
+ln -sfv libncurses.so /usr/lib/libcurses.so
+ln -sfv libncursesw.a /usr/lib/libcursesw.a
+ln -sfv libncurses.a /usr/lib/libcurses.a
+ln -sfv libncurses++w.a /usr/lib/libncurses++.a
+ln -sfv ncursesw5-config-32 /usr/bin/ncurses5-config-32
+
+
+
+
+
+(35)Ncurses-5.9 64 Bit
+patch -Np1 -i ../ncurses-5.9-branch_update-4.patch
+CC="gcc ${BUILD64}" CXX="g++ ${BUILD64}" \
+   ./configure --prefix=/usr --libdir=/lib64 \
+   --with-shared --without-debug --enable-widec \
+   --with-manpage-format=normal --enable-pc-files \
+   --with-default-terminfo-dir=/usr/share/terminfo
+make
+make install
+mv -v /usr/bin/ncursesw5-config{,-64}
+ln -svf multiarch_wrapper /usr/bin/ncursesw5-config
+mv -v /lib64/lib{panelw,menuw,formw,ncursesw,ncurses++w}.a /usr/lib64
+ln -svf ../../lib64/$(readlink /lib64/libncursesw.so) /usr/lib64/libncursesw.so
+ln -svf ../../lib64/$(readlink /lib64/libmenuw.so) /usr/lib64/libmenuw.so
+ln -svf ../../lib64/$(readlink /lib64/libpanelw.so) /usr/lib64/libpanelw.so
+ln -svf ../../lib64/$(readlink /lib64/libformw.so) /usr/lib64/libformw.so
+rm -v /lib64/lib{ncursesw,menuw,panelw,formw}.so
+
+
+for lib in curses ncurses form panel menu ; do
+        echo "INPUT(-l${lib}w)" > /usr/lib64/lib${lib}.so
+        ln -sfv lib${lib}w.a /usr/lib64/lib${lib}.a
+done
+ln -sfv libcurses.so /usr/lib64/libcursesw.so
+ln -sfv libncurses.so /usr/lib64/libcurses.so
+ln -sfv libncursesw.a /usr/lib64/libcursesw.a
+ln -sfv libncurses.a /usr/lib64/libcurses.a
+ln -sfv libncurses++w.a /usr/lib64/libncurses++.a
+ln -sfv ncursesw5-config-64 /usr/bin/ncurses5-config-64
+ln -sfv ncursesw5-config /usr/bin/ncurses5-config
+
+
+
+---------------------------------------------------------------------------------
+
+
+
+(36)Shadow-4.2.1
+sed -i src/Makefile.in \
+  -e 's/groups$(EXEEXT) //' -e 's/= nologin$(EXEEXT)/= /'
+find man -name Makefile.in -exec sed -i \
+  -e 's/man1\/groups\.1 //' -e 's/man8\/nologin\.8 //' '{}' \;
+CC="gcc ${BUILD64}" ./configure --sysconfdir=/etc
+make
+make install
+sed -i /etc/login.defs \
+    -e 's@#\(ENCRYPT_METHOD \).*@\1SHA512@' \
+    -e 's@/var/spool/mail@/var/mail@'
+mv -v /usr/bin/passwd /bin
+touch /var/log/lastlog
+chgrp -v utmp /var/log/lastlog
+chmod -v 664 /var/log/lastlog
+pwconv
+grpconv
+passwd root
+
+
+
+---------------------------------------------------------------------------------
+
+
+
+(37)Util-linux-2.24.2 32 Bit
+CC="gcc ${BUILD32}" ./configure --libdir=/lib \
+    --enable-write --docdir=/usr/share/doc/util-linux-2.24.2
+make
+make install
+
+
+
+(38)Util-linux-2.24.2 64 Bit
+sed -i -e 's@etc/adjtime@var/lib/hwclock/adjtime@g' \
+    $(grep -rl '/etc/adjtime' .)
+mkdir -pv /var/lib/hwclock
+CC="gcc ${BUILD64}" ./configure --libdir=/lib64 \
+    --enable-write --docdir=/usr/share/doc/util-linux-2.24.2
+make
+make install
+
+
+---------------------------------------------------------------------------------
+
+
+
+(39)Procps-ng-3.3.9 32 Bit Libraries
+CC="gcc ${BUILD32}" ./configure --prefix=/usr --exec-prefix= \
+    --libdir=/usr/lib --docdir=/usr/share/doc/procps-ng-3.3.9 \
+    --disable-kill
+make
+sed -i -r 's|(pmap_initname)\\\$|\1|' testsuite/pmap.test/pmap.exp
+make install
+mv -v /usr/bin/pidof /bin
+mv -v /usr/lib/libprocps.so.* /lib
+ln -sfv ../../lib/$(readlink /usr/lib/libprocps.so) /usr/lib/libprocps.so
+
+
+
+(40)Procps-ng-3.3.9 64 Bit
+CC="gcc ${BUILD64}" ./configure --prefix=/usr --exec-prefix= \
+    --libdir=/usr/lib64 --docdir=/usr/share/doc/procps-ng-3.3.9 \
+    --disable-kill
+make
+sed -i -r 's|(pmap_initname)\\\$|\1|' testsuite/pmap.test/pmap.exp
+make install
+mv -v /usr/bin/pidof /bin
+mv -v /usr/lib64/libprocps.so.* /lib64
+ln -sfv ../../lib64/$(readlink /usr/lib64/libprocps.so) /usr/lib64/libprocps.so
+
+
+
+---------------------------------------------------------------------------------
+
+
+
+(41)E2fsprogs-1.42.9 32 Bit Libraries
+mkdir -v build
+cd build
+PKG_CONFIG_PATH="${PKG_CONFIG_PATH32}" \
+CC="gcc ${BUILD32}" \
+../configure --prefix=/usr --with-root-prefix="" \
+    --enable-elf-shlibs --disable-libblkid \
+    --disable-libuuid --disable-fsck \
+    --disable-uuidd
+make libs
+make install-libs
+
+
+
+
+(42)E2fsprogs-1.42.9 64 Bit
+sed -i '/libdir.*=.*\/lib/s@/lib@/lib64@g' configure
+mkdir -v build
+cd build
+PKG_CONFIG_PATH="${PKG_CONFIG_PATH64}" \
+CC="gcc ${BUILD64}"  \
+../configure --prefix=/usr --with-root-prefix="" \
+    --enable-elf-shlibs --disable-libblkid \
+    --disable-libuuid --disable-fsck \
+    --disable-uuidd
+make
+make install
+make install-libs
+
+
+
+---------------------------------------------------------------------------------
+
+
+
+(43)Libcap-2.24 32 Bit Libraries
+make CC="gcc ${BUILD32}"
+make RAISE_SETFCAP=no lib=lib install
+chmod -v 755 /lib/libcap.so.2.24
+ln -sfv ../../lib/$(readlink /lib/libcap.so) /usr/lib/libcap.so
+rm -v /lib/libcap.so
+mv -v /lib/libcap.a /usr/lib
+
+
+
+
+(44)Libcap-2.24 64 Bit
+make CC="gcc ${BUILD64}"
+make lib=lib64 install
+chmod -v 755 /lib64/libcap.so.2.24
+ln -sfv ../../lib64/$(readlink /lib64/libcap.so) /usr/lib64/libcap.so
+rm -v /lib64/libcap.so
+mv -v /lib64/libcap.a /usr/lib64
+
+
+---------------------------------------------------------------------------------
+
+
+
+(45)Coreutils-8.22
+patch -Np1 -i ../coreutils-8.22-uname-1.patch
+FORCE_UNSAFE_CONFIGURE=1 CC="gcc ${BUILD64}" \
+   ./configure --prefix=/usr \
+    --enable-no-install-program=kill,uptime \
+    --enable-install-program=hostname
+make
+echo "dummy:x:1000:nobody" >> /etc/group
+chown -Rv nobody .
+sed -i '/dummy/d' /etc/group
+make install
+mv -v /usr/bin/{cat,chgrp,chmod,chown,cp,date} /bin
+mv -v /usr/bin/{dd,df,echo,false,hostname,ln,ls,mkdir,mknod} /bin
+mv -v /usr/bin/{mv,pwd,rm,rmdir,stty,true,uname} /bin
+mv -v /usr/bin/chroot /usr/sbin
+
+
+
+
+(46)Iana-Etc-2.30
+http://sethwklein.net/iana-etc  ### Download the packet!!!
+
+xzcat ../iana-etc-2.30-numbers_update-20140202-2.patch.xz | patch -Np1 -i -
+make
+make install
+
+
+
+---------------------------------------------------------------------------------
+
+
+
+(47)Libtool-2.4.2 32 Bit Libraries
+echo "lt_cv_sys_dlsearch_path='/lib /usr/lib /usr/local/lib /opt/lib'" > config.cache
+CC="gcc ${BUILD32}" ./configure --prefix=/usr \
+    --cache-file=config.cache
+make
+make install
+mv -v /usr/bin/libtool{,-32}
+
+
+
+
+(48)Libtool-2.4.2 64 Bit
+echo "lt_cv_sys_dlsearch_path='/lib64 /usr/lib64 /usr/local/lib64 /opt/lib64'" > config.cache
+CC="gcc ${BUILD64}" ./configure --prefix=/usr \
+   --libdir=/usr/lib64 --cache-file=config.cache
+make
+make install
+mv -v /usr/bin/libtool{,-64}
+ln -sv multiarch_wrapper /usr/bin/libtool
+
+
+---------------------------------------------------------------------------------
+
+
+
+
+(49)IPRoute2-3.14.0
+sed -i '/^TARGETS/s@arpd@@g' misc/Makefile
+sed -i '/ARPD/d' Makefile
+sed -i 's/arpd.8//' man/man8/Makefile
+patch -Np1 -i ../iproute2-3.14.0-libdir-1.patch
+make CC="gcc ${BUILD64}" LIBDIR=/usr/lib64
+make LIBDIR=/usr/lib64 DOCDIR=/usr/share/doc/iproute2-3.14.0 install
+
+
+---------------------------------------------------------------------------------
+
+
+
+(50)Bzip2-1.0.6 32 Bit Libraries
+sed -i -e 's:ln -s -f $(PREFIX)/bin/:ln -s :' Makefile
+sed -i 's@X)/man@X)/share/man@g' ./Makefile
+make -f Makefile-libbz2_so CC="gcc ${BUILD32}" CXX="g++ ${BUILD32}"
+make clean
+make CC="gcc ${BUILD32}" CXX="g++ ${BUILD32}" libbz2.a
+cp -v libbz2.a /usr/lib
+cp -av libbz2.so* /lib
+ln -sv ../../lib/libbz2.so.1.0 /usr/lib/libbz2.so
+
+
+
+
+(51)Bzip2-1.0.6 64 Bit
+sed -i -e 's:ln -s -f $(PREFIX)/bin/:ln -s :' Makefile
+sed -i 's@X)/man@X)/share/man@g' ./Makefile
+sed -i 's@/lib\(/\| \|$\)@/lib64\1@g' Makefile
+make -f Makefile-libbz2_so CC="gcc ${BUILD64}" CXX="g++ ${BUILD64}"
+make clean
+make CC="gcc ${BUILD64}" CXX="g++ ${BUILD64}"
+make CC="gcc ${BUILD64}" CXX="g++ ${BUILD64}" PREFIX=/usr install
+cp -v bzip2-shared /bin/bzip2
+cp -av libbz2.so* /lib64
+ln -sv ../../lib64/libbz2.so.1.0 /usr/lib64/libbz2.so
+rm -v /usr/bin/{bunzip2,bzcat,bzip2}
+ln -sv bzip2 /bin/bunzip2
+ln -sv bzip2 /bin/bzcat
+
+
+---------------------------------------------------------------------------------
+
+
+
+
+(52)GDBM-1.11 32 Bit Libraries
+CC="gcc ${BUILD32}" ./configure --prefix=/usr --enable-libgdbm-compat
+make
+make install
+
+
+(53)GDBM-1.11 64 Bit Libraries
+CC="gcc ${BUILD64}" \
+  ./configure --prefix=/usr --enable-libgdbm-compat --libdir=/usr/lib64
+make
+make install
+
+
+
+---------------------------------------------------------------------------------
+
+
+(54)Perl-5.20.0 32 Bit Libraries
+export BUILD_ZLIB=False
+export BUILD_BZIP2=0
+ip link set lo up
+echo "127.0.0.1 localhost $(hostname)" > /etc/hosts
+./configure.gnu --prefix=/usr \
+   -Dvendorprefix=/usr \
+   -Dman1dir=/usr/share/man/man1 \
+   -Dman3dir=/usr/share/man/man3 \
+   -Dpager="/bin/less -isR" \
+   -Dcc="gcc ${BUILD32}" \
+make
+make install
+unset BUILD_ZLIB BUILD_BZIP2
+mv -v /usr/bin/perl{,-32}
+mv -v /usr/bin/perl5.20.0{,-32}
+
+
+
+(55)Perl-5.20.0 64 Bit
+sed -i -e '/^BUILD_ZLIB/s/True/False/' \
+       -e '/^INCLUDE/s,\./zlib-src,/usr/include,' \
+       -e '/^LIB/s,\./zlib-src,/usr/lib64,' \
+       cpan/Compress-Raw-Zlib/config.in
+patch -Np1 -i ../perl-5.20.0-Configure_multilib-1.patch
+echo 'installstyle="lib64/perl5"' >> hints/linux.sh
+./configure.gnu --prefix=/usr \
+   -Dvendorprefix=/usr \
+   -Dman1dir=/usr/share/man/man1 \
+   -Dman3dir=/usr/share/man/man3 \
+   -Dpager="/bin/less -isR" \
+   -Dlibpth="/usr/local/lib64 /lib64 /usr/lib64" \
+   -Dcc="gcc ${BUILD64}" \
+   -Dusethreads -Duseshrplib
+make
+make install
+unset BUILD_ZLIB BUILD_BZIP2
+mv -v /usr/bin/perl{,-64}
+mv -v /usr/bin/perl5.20.0{,-64}
+ln -sv multiarch_wrapper /usr/bin/perl
+ln -sv multiarch_wrapper /usr/bin/perl5.20.0
+
+
+
+---------------------------------------------------------------------------------
+
+
+
+(56)Readline-6.3 32 Bit Libraries
+patch -Np1 -i ../readline-6.3-branch_update-4.patch
+CC="gcc ${BUILD32}" CXX="g++ ${BUILD32}" \
+   ./configure --prefix=/usr --libdir=/lib \
+    --docdir=/usr/share/doc/readline-6.3
+make SHLIB_LIBS=-lncurses
+make SHLIB_LIBS=-lncurses htmldir=/usr/share/doc/readline-6.3 install
+mv -v /lib/lib{readline,history}.a /usr/lib
+ln -svf ../../lib/$(readlink /lib/libreadline.so) /usr/lib/libreadline.so
+ln -svf ../../lib/$(readlink /lib/libhistory.so) /usr/lib/libhistory.so
+rm -v /lib/lib{readline,history}.so
+
+
+
+(57)Readline-6.3 64 Bit
+patch -Np1 -i ../readline-6.3-branch_update-4.patch
+CC="gcc ${BUILD64}" CXX="g++ ${BUILD64}" \
+   ./configure --prefix=/usr --libdir=/lib64 \
+    --docdir=/usr/share/doc/readline-6.3
+make SHLIB_LIBS=-lncurses
+make SHLIB_LIBS=-lncurses htmldir=/usr/share/doc/readline-6.3 install
+mv -v /lib64/lib{readline,history}.a /usr/lib64
+ln -svf ../../lib64/$(readlink /lib64/libreadline.so) /usr/lib64/libreadline.so
+ln -svf ../../lib64/$(readlink /lib64/libhistory.so) /usr/lib64/libhistory.so
+rm -v /lib64/lib{readline,history}.so
+
+
+---------------------------------------------------------------------------------
+
+
+(58)Autoconf-2.69
+CC="gcc ${BUILD64}" ./configure --prefix=/usr
+make
+make install
+
+
+
+(59)Automake-1.14.1
+CC="gcc ${BUILD64}" ./configure --prefix=/usr --docdir=/usr/share/doc/automake-1.14.1
+make
+make install
+
+
+---------------------------------------------------------------------------------
+
+
+
+(60)Bash-4.3
+patch -Np1 -i ../bash-4.3-branch_update-5.patch
+sed -i "/ac_cv_rl_libdir/s@/lib@&64@" configure
+CC="gcc ${BUILD64}" CXX="g++ ${BUILD64}" \
+    ./configure --prefix=/usr --bindir=/bin \
+    --without-bash-malloc --with-installed-readline \
+    --docdir=/usr/share/doc/bash-4.3
+make
+make install
+
+
+exec /bin/bash --login +h
+
+
+
+(61)Bc-1.06.95
+CC="gcc ${BUILD64}" ./configure --prefix=/usr \
+    --mandir=/usr/share/man --infodir=/usr/share/info
+make
+make install
+
+
+
+---------------------------------------------------------------------------------
+
+
+
+
+(62)Diffutils-3.3
+sed -i 's:= @mkdir_p@:= /bin/mkdir -p:' po/Makefile.in.in
+CC="gcc ${BUILD64}" ./configure --prefix=/usr
+sed -i 's@\(^#define DEFAULT_EDITOR_PROGRAM \).*@\1"vi"@' lib/config.h
+make
+make install
+
+
+---------------------------------------------------------------------------------
+
+
+
+(63)File-5.19 32 Bit Libraries
+CC="gcc ${BUILD32}" ./configure --prefix=/usr
+make
+make install
+
+
+
+
+(64)File-5.19 64 Bit
+CC="gcc ${BUILD64}" ./configure --prefix=/usr --libdir=/usr/lib64
+make
+make install
+
+
+---------------------------------------------------------------------------------
+
+
+
+(65)Gawk-4.1.1
+CC="gcc ${BUILD64}" ./configure --prefix=/usr \
+   --libexecdir=/usr/lib64
+make
+make install
+mkdir -v /usr/share/doc/gawk-4.1.1
+cp -v doc/{awkforai.txt,*.{eps,pdf,jpg}} /usr/share/doc/gawk-4.1.1
+
+
+(66)Findutils-4.4.2
+CC="gcc ${BUILD64}" ./configure --prefix=/usr \
+    --libexecdir=/usr/lib64/locate --localstatedir=/var/lib64/locate
+make
+make install
+
+
+
+---------------------------------------------------------------------------------
+
+
+
+(67)Gettext-0.19.1 32 Bit Libraries
+CC="gcc ${BUILD32}" CXX="g++ ${BUILD32}" \
+   ./configure --prefix=/usr \
+   --docdir=/usr/share/doc/gettext-0.19.1
+make
+make install
+
+
+
+
+(68)Gettext-0.19.1 64 Bit
+CC="gcc ${BUILD64}" CXX="g++ ${BUILD64}" \
+   ./configure --prefix=/usr --libdir=/usr/lib64 \
+   --docdir=/usr/share/doc/gettext-0.19.1
+make
+make install
+
+
+---------------------------------------------------------------------------------
+
+
+
+(69)Gperf-3.0.4
+CC="gcc ${BUILD64}" ./configure --prefix=/usr \
+    --docdir=/usr/share/doc/gperf-3.0.4
+make
+make install
+
+
+
+(70)Grep-2.19
+CC="gcc ${BUILD64}" ./configure --prefix=/usr \
+   --bindir=/bin
+make
+make install
+
+
+---------------------------------------------------------------------------------
+
+
+
+(71)Groff-1.22.2
+PAGE=[paper_size] CC="gcc ${BUILD64}" \
+   CXX="g++ ${BUILD64}" ./configure --prefix=/usr --libdir=/usr/lib64
+make
+make install
+
+
+
+(72)Less-462 ==> less458
+http://www.greenwoodsoftware.com/less/download.html   ### Download less458.tar.gz
+
+CC="gcc ${BUILD64}" ./configure --prefix=/usr \
+    --sysconfdir=/etc
+make
+make install
+mv -v /usr/bin/less /bin
+
+
+
+---------------------------------------------------------------------------------
+
+
+(73)Gzip-1.6
+CC="gcc ${BUILD64}" ./configure --prefix=/usr --bindir=/bin
+make
+make install
+mv -v /bin/z{egrep,cmp,diff,fgrep,force,grep,less,more,new} /usr/bin
+
+
+
+
+(74)IPutils-s20121221
+patch -Np1 -i ../iputils-s20121221-fixes-2.patch
+make CC="gcc ${BUILD64}" \
+    IPV4_TARGETS="tracepath ping clockdiff rdisc" \
+    IPV6_TARGETS="tracepath6 traceroute6"
+install -v -m755 ping /bin
+install -v -m755 clockdiff /usr/bin
+install -v -m755 rdisc /usr/bin
+install -v -m755 tracepath /usr/bin
+install -v -m755 trace{path,route}6 /usr/bin
+install -v -m644 doc/*.8 /usr/share/man/man8
+
+
+
+
+(75)Kbd-2.0.1
+CC="gcc ${BUILD64}" PKG_CONFIG_PATH="/tools/lib64/pkgconfig" \
+    ./configure --prefix=/usr --disable-vlock --enable-optional-progs
+make
+make install
+mv -v /usr/bin/{loadkeys,setfont} /bin
+mkdir -v /usr/share/doc/kbd-2.0.1
+cp -R -v docs/doc/* /usr/share/doc/kbd-2.0.1
+
+
+
+---------------------------------------------------------------------------------
+
+
+(76)Libpipeline-1.3.0 32 Bit Libraries  ==> libpipeline-1.4.0.tar.gz
+CC="gcc ${BUILD32}" \
+  ./configure --prefix=/usr
+make
+make install
+
+
+
+(77)Libpipeline-1.3.0 64 Bit Libraries  ==> libpipeline-1.4.0.tar.gz
+PKG_CONFIG_PATH=/tools/lib64/pkgconfig
+    CC="gcc ${BUILD64}" \
+    ./configure --prefix=/usr --libdir=/usr/lib64
+make
+make install
+
+
+---------------------------------------------------------------------------------
+
+
+
+(78)Man-DB-2.6.7.1
+PKG_CONFIG_PATH="${PKG_CONFIG_PATH64}" \
+    CC="gcc ${BUILD64}" ./configure --prefix=/usr --libexecdir=/usr/lib64 \
+    --docdir=/usr/share/doc/man-db-2.6.7.1 --sysconfdir=/etc \
+    --libdir=/usr/lib64 --disable-setuid --with-browser=/usr/bin/lynx \
+    --with-vgrind=/usr/bin/vgrind --with-grap=/usr/bin/grap
+make
+make install
+
+
+
+
+(79)Make-4.0
+CC="gcc ${BUILD64}" ./configure --prefix=/usr
+make
+make install
+
+
+---------------------------------------------------------------------------------
+
+
+
+
+(80)XZ Utils-5.0.5 32 Bit Libraries
+CC="gcc ${BUILD32}" ./configure --prefix=/usr \
+    --docdir=/usr/share/doc/xz-5.0.5
+make
+make install
+mv -v /usr/lib/liblzma.so.* /lib
+ln -sfv ../../lib/$(readlink /usr/lib/liblzma.so) /usr/lib/liblzma.so
+
+
+
+
+(81)XZ Utils-5.0.5 64 Bit
+CC="gcc ${BUILD64}" ./configure --prefix=/usr \
+    --libdir=/usr/lib64 --docdir=/usr/share/doc/xz-5.0.5
+make
+make install
+mv -v /usr/bin/{xz,lzma,lzcat,unlzma,unxz,xzcat} /bin
+mv -v /usr/lib64/liblzma.so.* /lib64
+ln -sfv ../../lib64/$(readlink /usr/lib64/liblzma.so) /usr/lib64/liblzma.so
+
+
+---------------------------------------------------------------------------------
+
+
+
+
+(82)Expat-2.1.0 32 Bit Libraries
+CC="gcc ${BUILD32}" CXX="g++ ${BUILD32}" ./configure \
+    --prefix=/usr --libdir=/usr/lib
+make
+make install
+
+
+
+(83)Expat-2.1.0 64 Bit
+CC="gcc ${BUILD64}" CXX="g++ ${BUILD64}" ./configure \
+    --prefix=/usr --libdir=/usr/lib64
+make
+make install
+install -v -m755 -d /usr/share/doc/expat-2.1.0
+install -v -m644 doc/*.{html,png,css} /usr/share/doc/expat-2.1.0
+
+
+
+---------------------------------------------------------------------------------
+
+
+
+(84)XML-Parser-2.42_01 32 Bit  ==> XML-Parser-2.44.tar.gz
+USE_ARCH=32 perl Makefile.PL
+make
+make install
+
+
+
+(85)XML-Parser-2.42_01 64 Bit  ==> XML-Parser-2.44.tar.gz
+USE_ARCH=64 perl Makefile.PL
+make
+make install
+
+
+---------------------------------------------------------------------------------
+
+
+
+(86)Intltool-0.50.2
+./configure --prefix=/usr
+make
+make install
+
+
+
+(87)Kmod-18 32 Bit Libraries
+PKG_CONFIG_PATH=${PKG_CONFIG_PATH32} CC="gcc ${BUILD32}" \
+  ./configure --prefix=/usr \
+    --bindir=/bin --sysconfdir=/etc \
+    --with-rootlibdir=/lib --libdir=/usr/lib \
+    --with-zlib --with-xz
+make
+make install
+
+
+
+
+(88)Kmod-18 64 Bit
+PKG_CONFIG_PATH=${PKG_CONFIG_PATH64} CC="gcc ${BUILD64}" \
+  ./configure --prefix=/usr \
+    --bindir=/bin --sysconfdir=/etc \
+    --with-rootlibdir=/lib64 --libdir=/usr/lib64 \
+    --with-zlib --with-xz
+make
+make install
+ln -sfv kmod /bin/lsmod
+for tool in depmod insmod modinfo modprobe rmmod; do
+    ln -sfv ../bin/kmod /sbin/${tool}
+done
+
+
+
+---------------------------------------------------------------------------------
+
+
+
+
+(89)Patch-2.7.1
+CC="gcc ${BUILD64}" ./configure --prefix=/usr
+make
+make install
+
+
+
+
+(90)Psmisc-22.21
+CC="gcc ${BUILD64}" ./configure --prefix=/usr
+make
+make install
+
+
+
+
+------------------------------------------------------------------------------------------------------
+find . | cpio -coB > /zb/clfs/clfs3.0.0_systemd_MultiLib_chapter10_psmisc_ok.cpio         ###备份
+------------------------------------------------------------------------------------------------------
+
+
+
+---------------------------重新启动PC, 重新进入chroot环境-----------------------------------
+mount /dev/sda1 /mnt/clfs
+source /root/.bash_profile_NEW
+source /root/.bashrc_NEW
+
+mount -v -o bind /dev ${CLFS}/dev
+mount -vt devpts -o gid=5,mode=620 devpts ${CLFS}/dev/pts
+mount -vt proc proc ${CLFS}/proc
+mount -vt tmpfs tmpfs ${CLFS}/run
+mount -vt sysfs sysfs ${CLFS}/sys
+
+chroot "${CLFS}" /tools/bin/env -i \
+    HOME=/root TERM="${TERM}" PS1='\u:\w\$ ' \
+    PATH=/bin:/usr/bin:/sbin:/usr/sbin:/tools/bin \
+    /tools/bin/bash --login +h
+
+source /root/.bash_profile
+
+exec /bin/bash --login +h
+---------------------------------------------------------------------------------
+
+
+
+
+(91)Systemd-213 32 Bit Libraries
+patch -Np1 -i ../systemd-213-compat-1.patch
+CC="gcc ${BUILD32}" PKG_CONFIG_PATH="${PKG_CONFIG_PATH32}" \
+  ./configure --prefix=/usr \
+    --sysconfdir=/etc --localstatedir=/var \
+    --libexecdir=/usr/lib --docdir=/usr/share/doc/systemd-213 \
+    --with-rootprefix="" --with-rootlibdir=/lib \
+    --enable-split-usr --disable-gudev --with-kbd-loadkeys=/bin/loadkeys \
+    --with-kbd-setfont=/bin/setfont --with-dbuspolicydir=/etc/dbus-1/system.d \
+    --with-dbusinterfacedir=/usr/share/dbus-1/interfaces \
+    --with-dbussessionservicedir=/usr/share/dbus-1/services \
+    --with-dbussystemservicedir=/usr/share/dbus-1/system-services \
+    cc_cv_CFLAGS__flto=no
+make src/shared/{af,errno}-{from,to}-name.h src/libsystemd/libsystemd.sym
+make libsystemd.la libudev.la libnss_myhostname.la
+make install-libLTLIBRARIES
+make install-pkgconfiglibDATA
+mv -v /usr/lib/libnss_myhostname.so.2 /lib
+
+
+
+
+(92)Systemd-213
+patch -Np1 -i ../systemd-213-compat-1.patch
+sed -i '/virt-install-hook /d' Makefile.in
+sed -i '/timesyncd.conf/d' src/timesync/timesyncd.conf.in
+sed -i '/-l/d' src/fsck/fsck.c
+CC="gcc ${BUILD64}" PKG_CONFIG_PATH="${PKG_CONFIG_PATH64}" \
+  ./configure --prefix=/usr \
+    --sysconfdir=/etc --localstatedir=/var --libdir=/usr/lib64 \
+    --libexecdir=/usr/lib64 --docdir=/usr/share/doc/systemd-213 \
+    --with-rootprefix="" -with-rootlibdir=/lib64 \
+    --enable-split-usr --disable-gudev --with-kbd-loadkeys=/bin/loadkeys \
+    --with-kbd-setfont=/bin/setfont --with-dbuspolicydir=/etc/dbus-1/system.d \
+    --with-dbusinterfacedir=/usr/share/dbus-1/interfaces \
+    --with-dbussessionservicedir=/usr/share/dbus-1/services \
+    --with-dbussystemservicedir=/usr/share/dbus-1/system-services \
+    cc_cv_CFLAGS__flto=no
+make
+sed -e "s:test/udev-test.pl::g" \
+    -e "s:test-bus-cleanup\$(EXEEXT) ::g" \
+    -e "s:test-bus-gvariant\$(EXEEXT) ::g" \
+    -i Makefile
+make install
+install -v -m644 man/*.html /usr/share/doc/systemd-213
+mv -v /usr/lib64/libnss_myhostname.so.2 /lib64
+rm -rfv /usr/lib/rpm
+
+
+for tool in runlevel reboot shutdown poweroff halt telinit; do
+  ln -sfv ../bin/systemctl /sbin/$tool
+done
+ln -sfv ../lib/systemd/systemd /sbin/init
+sed -i "s@root lock@root root@g" /usr/lib/tmpfiles.d/legacy.conf
+
+systemd-machine-id-setup
+
+cat > /etc/os-release << "EOF"
+# Begin /etc/os-release
+
+NAME=Cross-LFS
+ID=clfs
+
+PRETTY_NAME=Cross Linux From Scratch
+ANSI_COLOR=0;33
+
+VERSION=3.0.0-SYSTEMD
+VERSION_ID=20141018
+
+# End /etc/os-release
+EOF
+
+
+
+---------------------------------------------------------------------------------
+
+
+
+
+
+(93)D-Bus-1.8.6 32 Bit Libraries
+CC="gcc ${BUILD32}" USE_ARCH=32 PKG_CONFIG_PATH=${PKG_CONFIG_PATH32} \
+  ./configure --prefix=/usr --sysconfdir=/etc \
+    --libdir=/usr/lib --libexecdir=/usr/lib/dbus-1.0 \
+    --localstatedir=/var --with-systemdsystemunitdir=/lib/systemd/system \
+    --docdir=/usr/share/doc/dbus-1.8.6
+make
+make install
+mv -v /usr/lib/libdbus-1.so.* /lib
+ln -sfv ../../lib/$(readlink /usr/lib/libdbus-1.so) /usr/lib/libdbus-1.so
+
+
+
+
+(94)D-Bus-1.8.6 64 Bit
+CC="gcc ${BUILD64}" USE_ARCH=64 PKG_CONFIG_PATH=${PKG_CONFIG_PATH64} \
+  ./configure --prefix=/usr --sysconfdir=/etc \
+    --libdir=/usr/lib64 --libexecdir=/usr/lib64/dbus-1.0 \
+    --localstatedir=/var --with-systemdsystemunitdir=/lib/systemd/system \
+    --docdir=/usr/share/doc/dbus-1.8.6
+make
+make install
+mv -v /usr/lib64/libdbus-1.so.* /lib64
+ln -sfv ../../lib64/$(readlink /usr/lib64/libdbus-1.so) /usr/lib64/libdbus-1.so
+ln -sv /etc/machine-id /var/lib/dbus
+
+
+
+---------------------------------------------------------------------------------
+
+
+
+(95)Tar-1.27.1
+patch -Np1 -i ../tar-1.27.1-manpage-1.patch
+FORCE_UNSAFE_CONFIGURE=1 CC="gcc ${BUILD64}" \
+  ./configure --prefix=/usr \
+    --bindir=/bin --libexecdir=/usr/sbin
+make
+make install
+perl tarman > /usr/share/man/man1/tar.1
+make -C doc install-html docdir=/usr/share/doc/tar-1.27.1
+
+
+(96)Texinfo-5.2
+CC="gcc ${BUILD64}" ./configure --prefix=/usr
+make
+make install
+
+
+---------------------------------------------------------------------------------
+
+
+
+
+(97)Vim-7.4
+patch -Np1 -i ../vim-7.4-branch_update-7.patch
+echo '#define SYS_VIMRC_FILE "/etc/vimrc"' >> src/feature.h
+CC="gcc ${BUILD64}" CXX="g++ ${BUILD64}" \
+  ./configure --prefix=/usr
+make
+make install
+ln -sv vim /usr/bin/vi
+ln -sv ../vim/vim74/doc /usr/share/doc/vim-7.4
+
+cat > /etc/vimrc << "EOF"
+" Begin /etc/vimrc
+
+set nocompatible
+set backspace=2
+set ruler
+syntax on
+if (&term == "iterm") || (&term == "putty")
+  set background=dark
+endif
+
+" End /etc/vimrc
+EOF
+
+
+vim -c ':options'
+
+
+
+
+
+
+
+(98)GRUB-2.00 
+sed -i -e '/gets is a/d' grub-core/gnulib/stdio.in.h
+./configure --prefix=/usr \
+    --sysconfdir=/etc --disable-werror
+make
+make install
+
+install -m755 -dv /etc/default
+
+
+cat > /etc/default/grub << "EOF"
+# Begin /etc/default/grub
+
+GRUB_DEFAULT=0
+#GRUB_SAVEDEFAULT=true
+GRUB_HIDDEN_TIMEOUT=
+GRUB_HIDDEN_TIMEOUT_QUIET=false
+GRUB_TIMEOUT=10
+GRUB_DISTRIBUTOR=Cross-LFS
+
+GRUB_CMDLINE_LINUX=""
+GRUB_CMDLINE_LINUX_DEFAULT=""
+
+#GRUB_TERMINAL=console
+#GRUB_GFXMODE=640x480
+#GRUB_GFXPAYLOAD_LINUX=keep
+
+#GRUB_DISABLE_LINUX_UUID=true
+#GRUB_DISABLE_LINUX_RECOVERY=true
+
+#GRUB_INIT_TUNE="480 440 1"
+
+#GRUB_DISABLE_OS_PROBER=true
+
+# End /etc/default/grub
+EOF
+
+
+---------------------------------------------------------------------------------
+
+
+
+
+
+7. 系统配置 (Corresponding to Chapter11)
+==============================================================================================
+
+(1) Configuring the system clock
+------------------------------------------------------------
+cat > /etc/adjtime << "EOF"
+0.0 0 0.0
+0
+LOCAL
+EOF
+
+timedatectl set-local-rtc 1   ### Failed to create bus connection: No such file or directory
+#timedatectl set-time YYYY:MM:DD HH:MM:SS
+#timedatectl set-timezone TIMEZONE
+timedatectl list-timezones
+
+
+
+
+(2) Configuring the Linux Console
+-----------------------de-latin1 or en_US-------------------------------------
+cat > /etc/vconsole.conf << "EOF"
+KEYMAP=en_US
+FONT=Lat2-Terminus16
+EOF
+
+
+
+
+
+(3) Creating custom symlinks to devices
+------------------------------------------------------------
+udevadm test /sys/block/hdd
+
+
+cat >/etc/udev/rules.d/82-cdrom.rules << EOF
+
+# Custom CD-ROM symlinks
+SUBSYSTEM=="block", ENV{ID_MODEL}=="SAMSUNG_CD-ROM_SC-148F", \
+    ENV{ID_REVISION}=="PS05", SYMLINK+="cdrom"
+SUBSYSTEM=="block", ENV{ID_MODEL}=="PHILIPS_CDD5301", \
+    ENV{ID_SERIAL}=="5VO1306DM00190", SYMLINK+="cdrom1 dvd"
+
+EOF
+
+
+
+cat >/etc/udev/rules.d/82-cdrom.rules << EOF
+
+# Custom CD-ROM symlinks
+SUBSYSTEM=="block", ENV{ID_TYPE}=="cd", \
+    ENV{ID_PATH}=="pci-0000:00:07.1-ide-0:1", SYMLINK+="cdrom"
+SUBSYSTEM=="block", ENV{ID_TYPE}=="cd", \
+    ENV{ID_PATH}=="pci-0000:00:07.1-ide-1:1", SYMLINK+="cdrom1 dvd"
+
+EOF
+
+
+
+udevadm info -a -p /sys/class/video4linux/video0
+
+
+cat >/etc/udev/rules.d/83-duplicate_devs.rules << EOF
+
+# Persistent symlinks for webcam and tuner
+KERNEL=="video*", SYSFS{idProduct}=="1910", SYSFS{idVendor}=="0d81", \
+    SYMLINK+="webcam"
+KERNEL=="video*", SYSFS{device}=="0x036f", SYSFS{vendor}=="0x109e", \
+    SYMLINK+="tvtuner"
+
+EOF
+
+
+
+(4)The Bash Shell Startup Files
+------------------------------------------------------------
+
+cat > /etc/profile << "EOF"
+# Begin /etc/profile
+
+source /etc/locale.conf
+
+for f in /etc/bash_completion.d/*
+do
+  if [ -e ${f} ]; then source ${f}; fi
+done
+unset f
+
+export INPUTRC=/etc/inputrc
+
+# End /etc/profile
+EOF
+
+
+
+
+(5)Setting Up Locale Information
+------------------------------------------------------------
+locale -a
+LC_ALL=en_US.utf8 locale charmap
+
+
+LC_ALL=en_US.utf8 locale territory
+LC_ALL=en_US.utf8 locale language
+LC_ALL=en_US.utf8 locale charmap
+LC_ALL=en_US.utf8 locale int_curr_symbol
+LC_ALL=en_US.utf8 locale int_prefix
+
+
+cat > /etc/locale.conf << "EOF"
+# Begin /etc/locale.conf
+
+LANG=[ll]_[CC].[charmap][@modifiers]
+
+# End /etc/locale.conf
+EOF
+
+localectl set-locale LANG="[ll]_[CC][charmap][@modifiers]"
+localectl set-locale LANG="en_US.UTF-8" LC_CTYPE="en_US"
+
+
+
+
+(6)Creating the /etc/inputrc File
+------------------------------------------------------------
+cat > /etc/inputrc << "EOF"
+# Begin /etc/inputrc
+# Modified by Chris Lynn <roryo@roryo.dynup.net>
+
+# Allow the command prompt to wrap to the next line
+set horizontal-scroll-mode Off
+
+# Enable 8bit input
+set meta-flag On
+set input-meta On
+
+# Turns off 8th bit stripping
+set convert-meta Off
+
+# Keep the 8th bit for display
+set output-meta On
+
+# none, visible or audible
+set bell-style none
+
+# All of the following map the escape sequence of the
+# value contained inside the 1st argument to the
+# readline specific functions
+
+"\eOd": backward-word
+"\eOc": forward-word
+
+# for linux console
+"\e[1~": beginning-of-line
+"\e[4~": end-of-line
+"\e[5~": beginning-of-history
+"\e[6~": end-of-history
+"\e[3~": delete-char
+"\e[2~": quoted-insert
+
+# for xterm
+"\eOH": beginning-of-line
+"\eOF": end-of-line
+
+# for Konsole
+"\e[H": beginning-of-line
+"\e[F": end-of-line
+
+# End /etc/inputrc
+EOF
+
+
+
+(7)Creating the /etc/fstab File
+------------------------------------------------------------
+cat > /etc/fstab << "EOF"
+# Begin /etc/fstab
+
+# file system  mount-point  type   options          dump  fsck
+#                                                         order
+
+/dev/sda1     /            ext4  defaults         1     1
+
+
+# End /etc/fstab
+EOF
+
+
+
+
+
+
+8. 网络配置 (Corresponding to Chapter12)
+==============================================================================================
+(1)Configuring the system hostname
+echo "myclfspc" > /etc/hostname
+
+
+(2)Customizing the /etc/hosts File
+cat > /etc/hosts << "EOF"
+# Begin /etc/hosts (network card version)
+
+127.0.0.1 myclfspc.example.org myclfspc localhost
+
+# End /etc/hosts (network card version)
+EOF
+
+
+
+cat > /etc/hosts << "EOF"
+# Begin /etc/hosts (no network card version)
+
+127.0.0.1 [<HOSTNAME>.example.org] [HOSTNAME] localhost
+
+# End /etc/hosts (no network card version)
+EOF
+
+
+
+(3)Creating the /etc/resolv.conf File
+cat > /etc/resolv.conf << "EOF"
+# Begin /etc/resolv.conf
+
+domain [Your Domain Name]
+nameserver [IP address of your primary nameserver]
+nameserver [IP address of your secondary nameserver]
+
+# End /etc/resolv.conf
+EOF
+
+
+
+(4)Networking Configuration with Systemd-networkd
+
+
+
+
+
+(5)CLFS-Network-Scripts-20140224
+make install
+
+
+
+(6)Static Networking Configuration
+mkdir -pv /etc/sysconfig &&
+cd /etc/sysconfig &&
+cat > ifconfig.enp2s0 << "EOF"
+IFACE="enp2s0"
+SERVICE="ipv4-static"
+IP="192.168.30.200"
+GATEWAY="192.168.30.1"
+PREFIX="24"
+BROADCAST="192.168.30.255"
+EOF
+
+systemctl enable ifupdown@enp2s0
+systemctl disable ifupdown@enp2s0
+systemctl start ifupdown@enp2s0
+
+
+(7)DHCPCD-6.3.2
+CC="gcc ${BUILD64}" ./configure --prefix=/usr --sbindir=/sbin \
+    --sysconfdir=/etc --dbdir=/var/lib/dhcpcd --libexecdir=/usr/lib64/dhcpcd \
+    --libdir=/usr/lib64
+make
+make install
+
+
+cd /etc &&
+cat > dhcpcd.conf << "EOF"
+# dhcpcd configuration eth0 interface
+# See dhcpcd.conf(5) for details.
+
+interface eth0
+# dhcpcd-run-hooks uses these options.
+option subnet_mask, routers, domain_name_servers
+
+# The default timeout for waiting for a DHCP response is 30 seconds
+# which may be too long or too short and can be changed here.
+timeout 16
+EOF
+
+
+
+
+
+9. 系统启动配置 (Corresponding to Chapter13)
+==============================================================================================
+(1) Linux-3.14.21内核
+xzcat ../patch-3.14.21.xz | patch -Np1 -i -
+make mrproper
+make menuconfig
+make -j4
+make modules_install
+make firmware_install
+
+cp -v arch/x86_64/boot/bzImage /boot/vmlinuz-clfs-3.14.21
+cp -v System.map /boot/System.map-3.14.21
+cp -v .config /boot/config-3.14.21
+
+Note:
+(a)
+出现myclfspc login: 但是键盘输入没有任何响应。
+原因：检查使用的键盘硬件是否是ＵＳＢ键盘，如果是的，需要更换为ps/2键盘，这样就可以输入并登录成功了。
+     如果一定要使用ＵＳＢ键盘, 则编译内核时，需要
+USB Human Interface Devices(HID)                        
+      [M]  USB HIDBP Keyboard(basic) support
+      [M]  USB HIDBP Mouse(basic) support
+最好，改为[*]从而编入内核。
+
+
+
+
+(2)重新启动PC, 备份
+mount /dev/sda1 /mnt/clfs
+cd /mnt/clfs
+
+------------------------------------------------------------------------------------------------------
+find . | cpio -coB > /zb/clfs/clfs3.0.0_systemd_MultiLib_chapter13_before_grub_ok.cpio         ###备份(~4.1G)
+------------------------------------------------------------------------------------------------------
+
+
+
+
+(3)reboot_pc_machine
+fdisk -l
+fdisk /dev/sda
+mke2fs /dev/sda1	###Very very very important!!! otherwise, grub-install will error(For grub2.0.0)
+
+------------------------------------------------------------------------------------------------------
+cpio -icdu < /zb/clfs/clfs3.0.0_systemd_MultiLib_chapter13_before_grub_ok.cpio		###恢复
+------------------------------------------------------------------------------------------------------
+
+
+
+
+(4)重新进入chroot环境
+--------------------------------------------------------------
+mount /dev/sda1 /mnt/clfs
+
+source /root/.bash_profile_NEW
+source /root/.bashrc_NEW
+
+mount -v -o bind /dev ${CLFS}/dev
+mount -vt devpts -o gid=5,mode=620 devpts ${CLFS}/dev/pts
+mount -vt proc proc ${CLFS}/proc
+mount -vt tmpfs tmpfs ${CLFS}/run
+mount -vt sysfs sysfs ${CLFS}/sys
+
+chroot "${CLFS}" /tools/bin/env -i \
+    HOME=/root TERM="${TERM}" PS1='\u:\w\$ ' \
+    PATH=/bin:/usr/bin:/sbin:/usr/sbin:/tools/bin \
+    /tools/bin/bash --login +h
+
+source /root/.bash_profile
+
+-----------------------------------------------------
+
+
+
+
+
+(5)
+grub-install /dev/sda		### grub-install --debug /dev/sda (Show detailed information)
+
+grub-mkconfig -o /boot/grub/grub.cfg	### Very Important!!!
+
+
+exit
+
+
+(6)
+reboot_and_login_OK
+
+
+
+
+10. 系统网络功能配置
+==============================================================================================
+(1)
+mkdir -pv /etc/sysconfig &&
+cd /etc/sysconfig &&
+cat > ifconfig.enp2s0 << "EOF"
+IFACE="eth0"
+SERVICE="ipv4-static"
+IP="192.168.30.200"
+GATEWAY="192.168.30.1"
+PREFIX="24"
+BROADCAST="192.168.30.255"
+EOF
+
+
+
+(2)Linux-3.14.21内核
+xzcat ../patch-3.14.21.xz | patch -Np1 -i -
+make mrproper
+make menuconfig    ###Very very important, Slect Network Driver-->Ethernet Driver --> r8169 Driver and related realtek items, compile it into kerenl!!!
+make -j4
+make modules_install
+make firmware_install
+
+
+cp -v arch/x86_64/boot/bzImage /boot/vmlinuz-clfs-3.14.21
+cp -v System.map /boot/System.map-3.14.21
+cp -v .config /boot/config-3.14.21
+
+
+
+
+(3) reboot_pc_and_login_to_clfs_system
+------------------------------------------------
+systemctl enable ifupdown@enp2s0  ### Very very important!!!
+
+ifstat		### View interfaces such as enp2s0, enp5s0, ... 
+ifcfg		###
+
+ifcfg enp2s0 add 192.168.30.200
+ifcfg enp2s0 start
+ifcfg enp2s0 stop
+ifcfg enp2s0 del 192.168.30.200
+
+
+ping 192.168.30.200	### ping OK
+ping 192.168.30.12	### ping OK
+ping 192.168.30.1	### ping OK
+
+
+
+
+(4) No ifconfig command?
+------------------------------
+http://www.linuxfromscratch.org/blfs/view/7.10-systemd/basicnet/net-tools.html
+
+
+---------------(a)------------------------
+cd /sources/net-tools-CVS_20101030
+patch -Np1 -i ../net-tools-CVS_20101030-remove_dups-1.patch
+
+
+
+---------------(b)-- ---------------------
+Modify /sources/net-tools-CVS_20101030/Makefile
+
+#ifeq ($(origin CC), undefined)
+CC	= gcc
+#endif
+LD	= $(CC)
+...
+
+
+---------------(c) -----------------------
+yes "" | make config
+make
+make update    ### Some minor errors!
+
+
+---------------(d) -----------------------
+Manually copy 
+cp /sources/net-tools-CVS_20101030/ifconfig /sbin/
+cp /sources/net-tools-CVS_20101030/hostname /sbin/
+
+
+
+---------------(e) -----------------------
+reboot_my_machine
+
+
+---------------(f) -----------------------
+route -n	###test OK
+ifconfig	###test OK
+
+
+
+
+
+(5)
+-------------------------------------------------------------------------------------------------------------------------------------
+find . | cpio -coB > /zb/clfs/clfs3.0.0_systemd_MultiLib_ChapterEnd_ping_and_ifconfig_and_route_command_ok.cpio         ###备份(~4.1G)
+--------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+
+(6)
+reboot_pc_machine
+fdisk -l
+fdisk /dev/sda
+mke2fs /dev/sda1	###Very very very important!!! otherwise, grub-install will error(For grub2.0.0)
+
+-------------------------------------------------------------------------------------------------------------------------
+cpio -icdu < /zb/clfs/clfs3.0.0_systemd_MultiLib_ChapterEnd_ping_and_ifconfig_and_route_command_ok.cpio		###恢复
+-------------------------------------------------------------------------------------------------------------------------
+
+
+(7)重新进入chroot环境
+--------------------------------------------------------------
+mount /dev/sda1 /mnt/clfs
+
+source /root/.bash_profile_NEW
+source /root/.bashrc_NEW
+
+mount -v -o bind /dev ${CLFS}/dev
+mount -vt devpts -o gid=5,mode=620 devpts ${CLFS}/dev/pts
+mount -vt proc proc ${CLFS}/proc
+mount -vt tmpfs tmpfs ${CLFS}/run
+mount -vt sysfs sysfs ${CLFS}/sys
+
+chroot "${CLFS}" /tools/bin/env -i \
+    HOME=/root TERM="${TERM}" PS1='\u:\w\$ ' \
+    PATH=/bin:/usr/bin:/sbin:/usr/sbin:/tools/bin \
+    /tools/bin/bash --login +h
+
+source /root/.bash_profile    ### export cc="gcc"
+
+
+-----------------------------------------------------
+
+
+
+
+
+
+
+11. CLFS命令行系统打磨
+==============================================================================================
+(0)
+create a file: /etc/issue
+clfs3.0.0MultiLib_systemd@20171130
+
+
+(1)系统时区修改
+date
+ln -s /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+mv /etc/adjtime /etc/adjtime.OLD     ###DON'T USE THIS FILE
+date	### test OK
+
+
+(2)keyboard输入布局
+修改/etc/vconsole.conf
+KEYMAP=en_US
+
+
+
+(3)bash修改提示符
+修改/root/.bashrc
+export PS1='[\u@\h \W]#'	### test OK
+
+
+
+(4)bash增加目录颜色
+----------------------------(a) dircolors-------------
+/usr/bin/dircolors    ###This command 'dircolors' has already been installed in Coreutils-8.22!!!
+
+
+
+----------------------------(b) -------------------------------------
+http://www.linuxfromscratch.org/blfs/downloads/7.7/   ### View Chapter3 "The Bash Shell Startup Files"
+
+修改/etc/profile, 增加内容
+#-----------------------------------------------
+NORMAL="\[\e[0m\]"
+RED="\[\e[1;31m\]"
+GREEN="\[\e[1;32m\]"
+
+
+if [[ $EUID == 0 ]] ; then
+  PS1="$RED[$NORMAL\u@$NORMAL\h $NORMAL\w$RED]$NORMAL# $NORMAL"
+else
+  PS1="$RED[$NORMAL\u@$NORMAL\h $NORMAL\w$RED]$NORMAL\$ $NORMAL"
+fi
+
+for script in /etc/profile.d/*.sh ; do
+        if [ -r $script ] ; then
+                . $script
+        fi
+done
+
+unset script RED GREEN NORMAL
+#-----------------------------------------------
+
+
+
+----------------------------(c) -------------------------------------
+创建/etc/profile.d/dircolors.sh
+if [ -f "/etc/dircolors" ] ; then
+        eval $(dircolors -b /etc/dircolors)
+fi
+
+if [ -f "$HOME/.dircolors" ] ; then
+        eval $(dircolors -b $HOME/.dircolors)
+fi
+
+alias ls='ls --color=auto'
+alias ll='ls -al --color=auto'
+alias grep='grep --color=auto'
+alias vi='vim'
+
+
+----------------------------(d) -------------------------------------
+dircolors -p > /etc/dircolors		###Create some files
+
+
+
+
+
+
+(5)NIC启动加速
+mkdir /lib/firmware/rtl_nic/
+download rtl8168e-3.fw and put it into /lib/firmware/rtl_nic/
+reboot_machine_ok
+
+
+
+(6)使用ext4文件系统(/dev/sda1)
+==================================
+--------------(a) Very Very Important: Modify /etc/mke2fs.conf on HostMachine(Same as in clfs)!!! ----------------
+...
+ext4 = {
+		features = has_journal,extent,huge_file,flex_bg,uninit_bg,dir_nlink,extra_isize
+		auto_64-bit_support = 1
+		inode_size = 256
+	}
+	ext4dev = {
+		features = has_journal,extent,huge_file,flex_bg,uninit_bg,dir_nlink,extra_isize
+		inode_size = 256
+		options = test_fs=1
+	}
+...
+
+
+
+---------------(b) --------------------------------------------------
+mke2fs -t ext4 /dev/sda1	###Very Very Important!!!
+grub-probe -t fs /mnt/clfs/boot/grub
+
+
+
+---------------(c) ------------------------------------
+https://www.linuxquestions.org/questions/slackware-14/install-grub2-on-current-failed-4175580346-print/  
+View /etc/mke2fs.conf
+
+
+---------------(d) download grub-2.02~beta3-----------
+alpha.gnu.org/gnu/grub/grub-2.02~beta3.tar.xz   ### ***Must use this version!!!***
+
+
+
+---------------(e) install grub-2.02~beta3-----------
+./configure --prefix=/tools \
+    --build=${CLFS_HOST} --host=${CLFS_TARGET} \
+    --libdir=/tools/lib64 --disable-werror \
+    --enable-grub-mkfont=no --with-bootdir=tools/boot
+make
+make install
+
+
+---------------(f)----------------------------------------
+grub-probe -t fs /boot/grub		### ext2
+grub-install /dev/sda
+grub-probe -t fs /boot/grub		### ext2
+grub-mkconfig -o /boot/grub/grub.cfg
+
+
+---------------(g) Which is true: ext2 or ext4-------------
+blkid /dev/sda1    		### ext4
+lsblk -f	   		### ext4
+grub-probe -t fs /boot/grub	
+
+
+
+
+
+(7)bash启动时的错误提示(bash:have:command not found)
+Movefile: /etc/bash_completion.d/grub ==> /etc/grub.OLD
+
+
+
+(8)bash启动时的错误提示(Switched to clocksource tsc)
+Modify: /boot/grub/grub.cfg
+linux	/boot/vmlinuz-clfs-3.14.21 root=/dev/sda1 ro
+修改为
+linux	/boot/vmlinuz-clfs-3.14.21 root=/dev/sda1 ro clocksource=hpet
+
+
+
+
+
+(9)清理
+===========================
+rm -rf /cross-tools	### ~500MB
+rm -rf /tools		### ~900MB
+
+
+
+
+
+
+
+
+12. CLFS命令行系统ssh服务器
+==============================================================================================
+(0)Reference
+http://cblfs.clfs.org/index.php/Main_Page  ###CBLFS 
+http://www.linuxfromscratch.org/blfs/view/7.4/postlfs/openssh.html   ###download openssh-6.3p1.tar.gz
+http://cblfs.clfs.org/index.php/OpenSSL   ### Download patches
+
+
+
+
+(1)openssl-1.0.1c (openssl-1.0.1e no apropriate patch, so download: https://openssl.org/source/openssl-1.0.1c.tar.gz)
+======================================================
+------------(a) Multilib-32Bit (x86)-------------------
+Execute the following commands one by one!!!
+
+patch -Np1 -i ../openssl-1.0.1c-fix_manpages-1.patch
+patch -Np1 -i ../openssl-1.0.1c-32bit_x86_64-1.patch
+./Configure linux-x86_64-32 --openssldir=/etc/ssl --prefix=/usr shared
+USE_ARCH=32 make CC="gcc ${BUILD32}" PERL=/usr/bin/perl
+USE_ARCH=32 make PERL=/usr/bin/perl install  			###Remove install_docs in Makefile and then remove MANDIR=xxx in this command
+-------------------install OK-----------------------------------------
+
+
+------------(b) Multilib-64Bit (x86_64)----------------
+Execute the following commands one by one!!!
+
+patch -Np1 -i ../openssl-1.0.1c-fix_manpages-1.patch
+./Configure linux-x86_64 --openssldir=/etc/ssl --prefix=/usr shared
+USE_ARCH=64 make CC="gcc ${BUILD64}" PERL=/usr/bin/perl LIBDIR=lib64
+USE_ARCH=64 make PERL=/usr/bin/perl LIBDIR=lib64 install	###Remove install_docs in Makefile and then remove MANDIR=xxx in this command
+ln -sv ../../etc/ssl /usr/share		### Error: share dir already exits!
+cp -v -r certs /etc/ssl
+install -v -d -m755 /usr/share/doc/openssl-1.0.1c
+cp -v -r doc/{HOWTO,README,*.{txt,html,gif}} /usr/share/doc/openssl-1.0.1c
+
+
+------------(c) ceate a script----------------
+cd /usr/zbext  ### My own directory
+
+cat > mkcabundle.pl << "EOF"
+#!/usr/bin/perl -w                                                                                                          
+#                                                                                                                           
+# Used to regenerate ca-bundle.crt from the Mozilla certdata.txt.                                                           
+# Run as ./mkcabundle.pl > ca-bundle.crt                                                                                    
+#                                                                                                                           
+
+my $cvsroot = ':pserver:anonymous@cvs-mirror.mozilla.org:/cvsroot';
+my $certdata = 'mozilla/security/nss/lib/ckfw/builtins/certdata.txt';
+
+open(IN, "cvs -d $cvsroot co -p $certdata|")
+    || die "could not check out certdata.txt";
+
+my $incert = 0;
+
+print<<EOH;
+# This is a bundle of X.509 certificates of public Certificate
+# Authorities.  It was generated from the Mozilla root CA list.
+#
+# Source: $certdata
+#
+EOH
+
+while (<IN>) {
+    if (/^CKA_VALUE MULTILINE_OCTAL/) {
+        $incert = 1;
+        open(OUT, "|openssl x509 -text -inform DER -fingerprint")
+            || die "could not pipe to openssl x509";
+    } elsif (/^END/ && $incert) {
+        close(OUT);
+        $incert = 0;
+        print "\n\n";
+    } elsif ($incert) {
+        my @bs = split(/\\/);
+        foreach my $b (@bs) {
+            chomp $b;
+            printf(OUT "%c", oct($b)) unless $b eq '';
+        }
+    } elsif (/^CVS_ID.*Revision: ([^ ]*).*/) {
+        print "# Generated from certdata.txt RCS revision $1\n#\n";
+    }
+}
+EOF
+
+
+------------(d) execute the script----------------
+perl mkcabundle.pl > ca-bundle.crt   ### Need cvs command, so execute the following step of cvs-1.11.23 first!!!
+install -Dv -m644 ca-bundle.crt /etc/ssl/certs
+
+
+
+
+(2)cvs-1.11.23
+======================================================
+http://cblfs.clfs.org/index.php/CVS
+http://www.linuxfromscratch.org/patches/blfs/7.7/cvs-1.11.23-zlib-1.patch
+
+------------(a) Multilib-32Bit (x86)-------------------
+patch -Np1 -i ../cvs-1.11.23-zlib-1.patch
+CC="gcc ${BUILD32}" ./configure --prefix=/usr &&
+make
+make install
+
+
+
+------------(b) Multilib-64Bit (x86_64)----------------
+patch -Np1 -i ../cvs-1.11.23-zlib-1.patch
+CC="gcc ${BUILD64}" ./configure --prefix=/usr --libdir=/usr/lib64 &&
+make
+make install
+
+install -v -m755 -d /usr/share/doc/cvs-1.11.23 &&
+install -v -m644 FAQ README /usr/share/doc/cvs-1.11.23 &&
+install -v -m644 doc/*.pdf /usr/share/doc/cvs-1.11.23
+
+
+------------(c) --------------------------------------
+cd /source/openssl-1.0.1c
+perl mkcabundle.pl > ca-bundle.crt      ###  Unknown host cvs-mirror.mozilla.org
+install -Dv -m644 ca-bundle.crt /etc/ssl/certs
+
+
+
+
+(3)openssh-6.3p1
+======================================================
+--------------------------(a)---------------------------------
+http://www.linuxfromscratch.org/blfs/view/7.4/postlfs/openssh.html   ###download openssh-6.3p1.tar.gz
+
+groupadd -g 48 sshd &&
+useradd -c 'sshd PrivSep' -d /var/lib/sshd -g sshd -s /bin/false -u 48 sshd &&
+install -v -m700 -d /var/lib/sshd &&
+chown -v root:sys /var/lib/sshd
+
+CC="gcc ${BUILD64}" ./configure --prefix=/usr --sysconfdir=/etc/ssh \
+    --libexecdir=/usr/sbin --with-md5-passwords \
+    --with-privsep-path=/var/lib/sshd \
+    --with-superuser-path="/sbin:/bin:/usr/sbin:/usr/bin"
+make
+make install
+install -v -m755 -d /usr/share/doc/openssh-6.3p1
+install -v -m644 INSTALL LICENCE OVERVIEW README* /usr/share/doc/openssh-6.3p1
+
+
+--------------------------(b) ---------------------------------
+http://clfs.org/files/packages/2.1.0/ 	###下载各种软件包(bootscripts-cross-lfs-2.1-pre1.tar.xz)
+cd bootscripts-cross-lfs-2.1-pre1
+make install-sshd
+--------------------------install OK----------------------------------------
+
+
+(4)Modify /etc/ssh/sshd_config
+PermitRootLogin yes   ### Remove the comment symbol!
+
+
+(5)Execute the command
+/usr/sbin/sshd
+
+
+
+(6)
+scp a.txt root@192.168.30.12:/zb/	### On myclfspc_machine, test OK!
+scp a.txt root@192.168.30.200:/		### On other machines, test OK!
+
+
+
+
+(7)开机启动sshd服务
+---------------(a)---------------------------------
+Create a new description file: /etc/systemd/system/sshd.service
+
+[Unit]
+Description=/etc/sshd Compatibility
+ConditionPathExists=/etc/sshd
+
+[Service]
+Type=forking
+ExecStart=/etc/sshd start
+TimeoutSec=0
+StandardOutput=tty
+RemainAfterExit=yes
+SysVStartPriority=99
+
+[Install]
+WantedBy=multi-user.target
+
+
+---------------(b)---------------------------------
+create a new script file(Ref: /etc/rc.d/init.d/sshd): /etc/sshd, 
+then Modify some content to resolve the errors(boot_mesg and loadproc is not defined)!!
+
+
+#!/bin/bash
+# Begin $rc_base/init.d/sshd
+
+# Based on sysklogd script from LFS-3.1 and earlier.
+# Rewritten by Gerard Beekmans  - gerard@linuxfromscratch.org
+
+#$LastChangedBy: bdubbs $
+#$Date: 2006-04-15 17:34:16 -0500 (Sat, 15 Apr 2006) $
+
+#. /etc/sysconfig/rc
+#. $rc_functions
+
+pidfile=/var/run/sshd.pid
+
+case "$1" in
+    start)
+        if [ ! -f /etc/ssh/ssh_host_key ]; then
+          boot_mesg "Generating /etc/ssh/ssh_host_key"
+          ssh-keygen -t rsa1 -f /etc/ssh/ssh_host_key -N ""
+          evaluate_retval
+        fi
+        if [ ! -f /etc/ssh/ssh_host_dsa_key ]; then
+          boot_mesg "Generating /etc/ssh/ssh_host_dsa_key"
+          ssh-keygen -t dsa -f /etc/ssh/ssh_host_dsa_key -N ""
+          evaluate_retval
+        fi
+        if [ ! -f /etc/ssh/ssh_host_rsa_key ]; then
+          boot_mesg "Generating /etc/ssh/ssh_host_rsa_key"
+          ssh-keygen -t rsa -f /etc/ssh/ssh_host_rsa_key -N ""
+          evaluate_retval
+        fi
+
+       # boot_mesg "Starting SSH Server..."
+        # Also prevent ssh from being killed by out of memory conditions
+        #loadproc -p $pidfile /usr/sbin/sshd 
+        /usr/sbin/sshd
+        sleep 1
+        echo "-16" >/proc/`cat $pidfile`/oom_adj
+        ;;
+
+    stop)
+        #boot_mesg "Stopping SSH Server..."
+        #killproc -p $pidfile /usr/sbin/sshd
+	ps -ef|grep sshd | awk '{print $2}' | xargs kill -9
+        ;;
+
+    reload)
+        boot_mesg "Reloading SSH Server..."
+        reloadproc -p $pidfile /usr/sbin/sshd
+        ;;
+
+    restart)
+        $0 stop
+        sleep 1
+        $0 start
+        ;;
+
+    status)
+        statusproc -p $pidfile /usr/sbin/sshd
+        ;;
+
+    *)
+        echo "Usage: $0 {start|stop|reload|restart|status}"
+        exit 1
+        ;;
+esac
+
+# End $rc_base/init.d/sshd
+
+
+
+---------------(c)---------------------------------
+check /usr/sbin/sshd exists!
+
+
+
+
+---------------(d)---------------------------------
+systemctl enable ssh.service
+systemctl start ssh.service
+systemctl stop ssh.service
+systemctl disable ssh.service
+
+
+
+
+(8)
+-------------------------------------------------------------------------------------------------------------------------------------
+find . | cpio -coB > /zb/clfs/clfs3.0.0_systemd_MultiLib_ChapterEnd_and_cblfs_ssh_service_ok.cpio         ###备份(~4.1G)
+--------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+
+(9)
+reboot_pc_machine
+fdisk -l
+fdisk /dev/sda
+mke2fs /dev/sda1	###Very very very important!!! otherwise, grub-install will error(For grub2.0.0)
+
+-------------------------------------------------------------------------------------------------------------------------
+cpio -icdu < /zb/clfs/clfs3.0.0_systemd_MultiLib_ChapterEnd_and_cblfs_ssh_service_ok.cpio		###恢复
+-------------------------------------------------------------------------------------------------------------------------
+
+
+
+
+(10)重新进入chroot环境
+--------------------------------------------------------------
+mount /dev/sda1 /mnt/clfs
+
+source /root/.bash_profile_NEW
+source /root/.bashrc_NEW
+
+mount -v -o bind /dev ${CLFS}/dev
+mount -vt devpts -o gid=5,mode=620 devpts ${CLFS}/dev/pts
+mount -vt proc proc ${CLFS}/proc
+mount -vt tmpfs tmpfs ${CLFS}/run
+mount -vt sysfs sysfs ${CLFS}/sys
+
+chroot "${CLFS}" /tools/bin/env -i \
+    HOME=/root TERM="${TERM}" PS1='\u:\w\$ ' \
+    PATH=/bin:/usr/bin:/sbin:/usr/sbin:/tools/bin \
+    /tools/bin/bash --login +h
+
+source /root/.bash_profile    ### export cc="gcc"
+
+
+
+--------------when_no_tools_dir(we removed /tools)--------
+chroot "${CLFS}" /usr/bin/env -i \
+    HOME=/root TERM="${TERM}" PS1='\u:\w\$ ' \
+    PATH=/bin:/usr/bin:/sbin:/usr/sbin:/tools/bin \
+    /bin/bash --login +h
+
+source /root/.bash_profile
+-----------------------------------------------------
+
+
+
+
+
+
+
+13. 安装python2.7.8
+=======================================================================================
+(0)
+http://cblfs.clfs.org/index.php/Python
+http://blog.chinaunix.net/uid-8050568-id-2034763.html   ###Very important: Ref this to compile 64bit version!!!
+
+
+
+(1)32Bit python2.7.8
+export XORG_PREFIX=/usr/X11R7
+patch -Np1 -i ../Python-2.7.6-multilib-1.patch
+
+sed -i "s@/usr/X11R6@${XORG_PREFIX}@g" setup.py &&
+sed -i 's@/lib64@/lib@g' Modules/_ctypes/libffi/m4/libtool.m4 \
+    Modules/_ctypes/libffi/configure setup.py &&
+sed -i "s/'lib64'/'lib'/g" setup.py &&
+CC="gcc ${BUILD32}" CXX="g++ ${BUILD32}" ./configure --prefix=/usr \
+    --enable-shared
+make
+
+
+make install
+python    ### Currently test ok!
+
+mv -v /usr/bin/python{,-32} &&
+mv -v /usr/bin/python2{,-32} &&
+mv -v /usr/bin/python2.7{,-32} &&
+mv -v /usr/include/python2.7/pyconfig{,-32}.h &&
+ln -sfv python2.7-32 /usr/bin/python2-32 &&
+ln -sfv python2-32 /usr/bin/python-32
+
+
+
+(2)64Bit python2.7.8
+export XORG_PREFIX=/usr/X11R7
+patch -Np1 -i ../Python-2.7.6-multilib-1.patch
+
+sed -i -e "s:@@MULTILIB_DIR@@:lib64:g" \
+        Lib/distutils/command/install.py \
+        Lib/distutils/sysconfig.py \
+        Lib/site.py \
+        Makefile.pre.in \
+        Modules/Setup.dist \
+        Modules/getpath.c \
+        setup.py
+CC="gcc ${BUILD64}" CXX="g++ ${BUILD64}" ./configure --prefix=/usr --libdir=/usr/lib64 --enable-shared
+
+make EXTRA_CFLAGS="-fwrapv"
+make install
+python		### Currently test ok!
+
+
+mv -v /usr/bin/python{,-64} &&
+mv -v /usr/bin/python2{,-64} &&
+mv -v /usr/bin/python2.7{,-64} &&
+ln -sfv python2.7-64 /usr/bin/python2-64 &&
+ln -sfv python2-64 /usr/bin/python-64 &&
+ln -sfv multiarch_wrapper /usr/bin/python &&
+ln -sfv multiarch_wrapper /usr/bin/python2 &&
+ln -sfv multiarch_wrapper /usr/bin/python2.7 &&
+mv -v /usr/include/python2.7/pyconfig{,-64}.h
+
+python		### Currently test ok!
+python-32	### test ok!
+python-64	### test ok!	
+
+
+
+(3)
+-------------------------------------------------------
+cat > /usr/include/python2.7/pyconfig.h << "EOF"
+/* pyconfig.h - Stub Header  */
+#ifndef __STUB__PYCONFIG_H__
+#define __STUB__PYCONFIG_H__
+
+#if defined(__x86_64__) || \
+    defined(__sparc64__) || \
+    defined(__arch64__) || \
+    defined(__powerpc64__) || \
+    defined (__s390x__)
+# include "pyconfig-64.h"
+#else
+# include "pyconfig-32.h"
+#endif
+
+#endif /* __STUB__PYCONFIG_H__ */
+EOF
+------------Finish and Test OK-----------
+
+
+
+
+
+(4)重新进入chroot环境
+--------------------------------------------------------------
+mount /dev/sda1 /mnt/clfs
+
+source /root/.bash_profile_NEW
+source /root/.bashrc_NEW
+
+mount -v -o bind /dev ${CLFS}/dev
+mount -vt devpts -o gid=5,mode=620 devpts ${CLFS}/dev/pts
+mount -vt proc proc ${CLFS}/proc
+mount -vt tmpfs tmpfs ${CLFS}/run
+mount -vt sysfs sysfs ${CLFS}/sys
+
+chroot "${CLFS}" /tools/bin/env -i \
+    HOME=/root TERM="${TERM}" PS1='\u:\w\$ ' \
+    PATH=/bin:/usr/bin:/sbin:/usr/sbin:/tools/bin \
+    /tools/bin/bash --login +h
+
+source /root/.bash_profile    ### export cc="gcc"
+
+
+
+--------------when_no_tools_dir(we removed /tools)--------
+chroot "${CLFS}" /usr/bin/env -i \
+    HOME=/root TERM="${TERM}" PS1='\u:\w\$ ' \
+    PATH=/bin:/usr/bin:/sbin:/usr/sbin:/tools/bin \
+    /bin/bash --login +h
+
+source /root/.bash_profile
+-----------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
