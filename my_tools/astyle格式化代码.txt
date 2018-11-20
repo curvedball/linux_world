@@ -1,0 +1,7 @@
+
+
+
+wine "C:\windows\AStyle.exe" Z:/usr/src/norm1.5r6z/protolib/*.cpp Z:/usr/src/norm1.5r6z/protolib/*.h --style=ansi --add-brackets -f -p -d -U -v -n -s4 -S -N -L -m0 -M40 --recursive --convert-tabs %f
+
+
+
