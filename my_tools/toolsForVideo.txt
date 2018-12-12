@@ -1,0 +1,40 @@
+
+ubuntu16.04
+
+1. download lantern
+https://github.com/getlantern/lantern
+
+Modify mac if needed: 
+ifconfig enp5s0 hw ether f8:33:e6:a0:26:88
+
+Now we can play videos on www.youtube.com!
+But we cannot download it! 
+
+
+2. firefox
+menu-->Add-ons-->Search"Youtube" --> install download plugin,
+then we can download the corresponding video files on www.youtube.com
+We can also download the subtitles(text of video)
+
+
+
+3. smplayer
+(1)
+apt install smplayer
+
+
+(2)Set the default player
+Right click a.mp4 file --> Properties --> "Open with" --> Select one player and click the "Set as default" button!
+
+
+(3) load subtitles
+In smplayer's menu, Subtitles-->Load
+Turn on/off the subtiles at the toolbar of smplayer!
+
+
+
+
+
+
+
+
