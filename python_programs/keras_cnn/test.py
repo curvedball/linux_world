@@ -6,6 +6,13 @@ Gets to 98.40% test accuracy after 20 epochs
 
 
 https://blog.csdn.net/houchaoqun_xmu/article/details/78492718
+
+zb:
+erroProcess
+/srv/anaconda3/lib/python3.6/site-packages/keras/backend/tensorflow_backend.py
+
+Modify:
+return tf.nn.softmax(x, axis=axis)  ------>  return tf.nn.softmax(x, dim=axis)
 '''
  
 from __future__ import print_function
@@ -18,18 +25,19 @@ from keras.optimizers import RMSprop
  
 batch_size = 128
 num_classes = 10
-epochs = 20
+epochs = 2
  
 # the data, shuffled and split between train and test sets 
 # (x_train, y_train), (x_test, y_test) = mnist.load_data()
  
 import numpy as np
-path='./mnist.npz'
+path='/root/Downloads/mnist.npz'
 f = np.load(path)
 x_train, y_train = f['x_train'], f['y_train']
 x_test, y_test = f['x_test'], f['y_test']
 f.close()
- 
+print("Load Dataset OK")
+
 x_train = x_train.reshape(60000, 784).astype('float32')
 x_test = x_test.reshape(10000, 784).astype('float32')
 x_train /= 255
